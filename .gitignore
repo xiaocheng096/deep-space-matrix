@@ -1,0 +1,10 @@
+# 系统与编辑器杂项
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 日志与临时文件
+*.log
+*.tmp
+_*.png
+_edge*

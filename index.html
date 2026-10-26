@@ -1,0 +1,4492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#070b10" />
+<title>深空矩阵 · 卡片式自动化工厂</title>
+<style>
+/* ============================================================
+   0. 基础重置 & 主题变量（深色科技风）
+   ============================================================ */
+*,*::before,*::after{ box-sizing:border-box; }
+
+:root{
+  --bg:#06090d;
+  --panel:#0b1119;
+  --panel-2:#0f1721;
+  --line:rgba(96,196,220,.13);
+  --line-2:rgba(96,196,220,.32);
+  --txt:#c3d3e0;
+  --txt-2:#6f8698;
+  --acc:#4fd8e8;
+  --acc-soft:rgba(79,216,232,.08);
+
+  /* 六种矿物色 */
+  --iron:#8fa8bd;
+  --copper:#e08b4a;
+  --silver:#dbeaf6;
+  --coal:#4e5766;
+  --wood:#a3a660;
+  --stone:#a6afba;
+
+  --ok:#5ee0a0;
+  --warn:#e8b34b;
+  --bad:#e2604a;
+
+  --h-top:46px;
+  --h-dock:170px;
+  --w-left:234px;
+  --w-right:252px;
+
+  --font:"HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--txt);
+  font-family:var(--font);
+  font-size:13px;
+  line-height:1.45;
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+#app{
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  height:100dvh;
+}
+
+.panel::-webkit-scrollbar,.dock-scroll::-webkit-scrollbar,.tech-body::-webkit-scrollbar{ width:6px; height:6px; }
+.panel::-webkit-scrollbar-thumb,.dock-scroll::-webkit-scrollbar-thumb,.tech-body::-webkit-scrollbar-thumb{
+  background:rgba(96,196,220,.18); border-radius:3px;
+}
+.panel::-webkit-scrollbar-track,.tech-body::-webkit-scrollbar-track{ background:transparent; }
+
+/* ============================================================
+   1. 顶部状态栏
+   ============================================================ */
+.topbar{
+  flex:0 0 auto;
+  height:var(--h-top);
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:0 10px;
+  background:linear-gradient(180deg,#0c141d,#080d13);
+  border-bottom:1px solid var(--line);
+  position:relative;
+  z-index:50;
+}
+
+.brand{
+  display:flex; align-items:center; gap:8px;
+  padding:4px 8px 4px 6px; margin-right:2px;
+  flex:0 0 auto;
+  background:transparent; border:1px solid transparent; border-radius:5px;
+  color:inherit; font-family:inherit; cursor:pointer;
+  transition:.16s;
+}
+.brand:hover{ background:rgba(79,216,232,.07); border-color:var(--line); }
+.brand-caret{ font-size:10px; color:var(--txt-2); line-height:1; margin-left:-2px; }
+.brand:hover .brand-caret{ color:var(--acc); }
+.brand-mark{ color:var(--acc); font-size:15px; line-height:1; text-shadow:0 0 12px rgba(79,216,232,.7); }
+.brand-name{ font-size:13px; font-weight:600; letter-spacing:.06em; white-space:nowrap; }
+.brand-sub{
+  font-size:8.5px; letter-spacing:.11em; color:var(--txt-2);
+  border:1px solid var(--line); border-radius:2px; padding:1px 4px;
+}
+
+.stats{ flex:1 1 auto; min-width:0; display:flex; align-items:center; overflow-x:auto; scrollbar-width:none; }
+.stats::-webkit-scrollbar{ display:none; }
+
+.stat{
+  display:flex; flex-direction:column; gap:1px;
+  padding:0 13px; border-left:1px solid var(--line);
+  white-space:nowrap; flex:0 0 auto;
+}
+.stat .k{ font-size:10px; color:var(--txt-2); letter-spacing:.08em; }
+.stat b{ font-size:12.5px; font-weight:600; color:#dfeaf3; letter-spacing:.02em; font-variant-numeric:tabular-nums; }
+.stat b i{ font-style:normal; color:var(--txt-2); font-size:10px; }
+.stat b small{ color:var(--txt-2); font-size:10px; font-weight:400; }
+.stat b.ok{ color:var(--ok); }
+.stat b.warn{ color:var(--warn); }
+.stat b.bad{ color:var(--bad); }
+
+.top-actions{ display:flex; gap:6px; flex:0 0 auto; }
+
+.tbtn{
+  font-family:inherit; font-size:11px;
+  color:var(--txt); background:rgba(15,23,33,.9);
+  border:1px solid var(--line); border-radius:4px;
+  padding:5px 10px; cursor:pointer;
+  transition:.16s; white-space:nowrap; position:relative;
+  touch-action:manipulation;
+}
+.tbtn:hover{ border-color:var(--line-2); color:var(--acc); background:rgba(79,216,232,.07); }
+.tbtn:active{ transform:scale(.97); }
+
+.only-mobile{ display:none !important; }
+
+/* 可解锁红点 */
+.dot{
+  display:none; width:5px; height:5px; border-radius:50%;
+  background:#ffd166; box-shadow:0 0 7px #ffd166;
+  position:absolute; top:3px; right:3px;
+}
+.dot.on{ display:block; }
+
+/* ============================================================
+   2. 主布局
+   ============================================================ */
+.layout{
+  flex:1 1 auto; min-height:0;
+  display:grid;
+  grid-template-columns:var(--w-left) minmax(0,1fr) var(--w-right);
+}
+
+.panel{
+  background:var(--panel);
+  border-right:1px solid var(--line);
+  overflow-y:auto; overflow-x:hidden; min-width:0;
+}
+.panel-right{ border-right:0; border-left:1px solid var(--line); }
+
+.p-head{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:9px 12px;
+  background:linear-gradient(180deg,rgba(16,24,33,.96),rgba(11,17,25,.96));
+  border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:3;
+  backdrop-filter:blur(6px);
+}
+.p-head h2{ margin:0; font-size:11px; font-weight:600; letter-spacing:.14em; color:#9fb6c6; }
+.p-tag{
+  font-size:9px; color:var(--txt-2); letter-spacing:.1em;
+  border:1px solid var(--line); border-radius:3px; padding:1px 5px;
+}
+.p-tag.live{ color:var(--ok); border-color:rgba(94,224,160,.3); }
+.p-tag.sandbox{ color:#c9aef7; border-color:rgba(170,130,240,.35); background:rgba(170,130,240,.08); }
+.p-tag.warn{ color:var(--warn); border-color:rgba(232,179,75,.3); }
+.p-sep{ height:1px; background:var(--line); margin:6px 0; }
+
+/* --- 左侧：资源 --- */
+.res-list{ padding:8px 9px; display:flex; flex-direction:column; gap:1px; }
+.res{
+  display:flex; align-items:center; gap:9px;
+  padding:6px 8px; border-radius:4px;
+  border:1px solid transparent;
+  transition:.15s;
+}
+.res:hover{ background:rgba(79,216,232,.05); border-color:var(--line); }
+.res-ico{
+  width:15px; height:15px; border-radius:3px; flex:0 0 auto;
+  background:var(--c);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.22), 0 0 10px -3px var(--c);
+}
+.res-name{ flex:1; font-size:12px; color:#a9bccb; }
+.res-val{
+  font-size:12.5px; font-weight:600; color:#e4eef6;
+  font-variant-numeric:tabular-nums; letter-spacing:.02em;
+  transition:color .2s, transform .2s;
+}
+.res-val.up{ color:#8ff0c2; transform:scale(1.14); }
+.res-val.inf{ color:#c9aef7; font-size:15px; line-height:1.1; }
+
+/* --- 左侧：任务 --- */
+.task{
+  margin:6px 10px 12px;
+  padding:10px 10px 11px;
+  border:1px solid var(--line);
+  border-radius:5px;
+  background:linear-gradient(160deg,rgba(79,216,232,.06),rgba(79,216,232,0) 65%);
+  position:relative;
+}
+.task::before{
+  content:""; position:absolute; left:-1px; top:8px; bottom:8px; width:2px;
+  background:var(--acc); opacity:.55; border-radius:2px;
+}
+.task-title{ font-size:12px; font-weight:600; color:#d9e7f1; margin-bottom:8px; }
+.task-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.task-list li{
+  display:flex; align-items:flex-start; gap:7px;
+  font-size:11.5px; color:var(--txt-2); line-height:1.5;
+}
+.task-list li::before{
+  content:""; flex:0 0 auto; width:5px; height:5px; margin-top:5px;
+  border-radius:50%; background:rgba(96,196,220,.35);
+}
+.task-list li.done{ color:#7f9a8c; text-decoration:line-through; text-decoration-color:rgba(94,224,160,.4); }
+.task-list li.done::before{ background:var(--ok); box-shadow:0 0 8px rgba(94,224,160,.8); }
+.task-hint{
+  margin-top:9px; padding-top:8px;
+  border-top:1px dashed var(--line);
+  font-size:10.5px; color:var(--txt-2); line-height:1.55;
+}
+
+/* ============================================================
+   3. 中央画布
+   ============================================================ */
+.stage{ position:relative; min-width:0; min-height:0; overflow:hidden; background:#070b10; }
+
+.viewport{
+  position:absolute; inset:0; overflow:hidden;
+  cursor:grab;
+  touch-action:none;
+  background-color:#070b10;
+  background-image:
+    linear-gradient(to right, rgba(90,200,220,.042) 1px, transparent 1px),
+    linear-gradient(to bottom,rgba(90,200,220,.042) 1px, transparent 1px),
+    linear-gradient(to right, rgba(90,200,220,.085) 1px, transparent 1px),
+    linear-gradient(to bottom,rgba(90,200,220,.085) 1px, transparent 1px);
+  background-size:40px 40px, 40px 40px, 200px 200px, 200px 200px;
+}
+.viewport.far{
+  background-image:
+    linear-gradient(to right, rgba(90,200,220,.075) 1px, transparent 1px),
+    linear-gradient(to bottom,rgba(90,200,220,.075) 1px, transparent 1px);
+}
+.viewport.panning{ cursor:grabbing; }
+.viewport.drop-ok{ box-shadow:inset 0 0 0 1px rgba(79,216,232,.45), inset 0 0 90px rgba(79,216,232,.08); }
+
+.world{ position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; will-change:transform; }
+.link-layer{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+
+.stage::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 40%,transparent 40%,rgba(0,0,0,.45) 100%);
+}
+
+/* ---------- 3.1 矿脉区域 ---------- */
+.deposit{
+  position:absolute; left:0; top:0;
+  cursor:pointer;
+  transition:filter .2s;
+}
+.dep-poly{
+  width:100%; height:100%; display:block;
+  overflow:visible;
+}
+.dep-fill{
+  fill:var(--c); fill-opacity:.10;
+  stroke:var(--c); stroke-opacity:.42; stroke-width:1.4;
+  stroke-dasharray:5 4;
+  transition:fill-opacity .18s, stroke-opacity .18s;
+}
+.dep-dot{ fill:var(--c); fill-opacity:.55; }
+
+/* 长按采集的进度环 */
+.dep-ring{
+  fill:none; stroke:var(--c); stroke-width:2.6; stroke-linecap:round;
+  opacity:0; transition:opacity .16s;
+  filter:drop-shadow(0 0 6px var(--c));
+}
+.dep-ring-bg{ fill:none; stroke:rgba(255,255,255,.16); stroke-width:2.6; opacity:0; transition:opacity .16s; }
+.deposit.charging .dep-ring{ opacity:1; }
+.deposit.charging .dep-ring-bg{ opacity:1; }
+.deposit.charging .dep-fill{ fill-opacity:.24; stroke-opacity:.92; }
+.deposit.charging .dep-dot{ fill-opacity:.9; }
+.deposit:hover .dep-fill{ fill-opacity:.18; stroke-opacity:.75; }
+.deposit:active .dep-fill{ fill-opacity:.26; }
+
+.dep-label{
+  position:absolute; left:50%; top:50%;
+  /* 缩得越远，标签相对放大一点；缩到很小的时候整体淡出，只留色块 */
+  transform:translate(-50%,-50%) scale(var(--lbl,1));
+  opacity:var(--lbl-op,1);
+  transition:opacity .2s;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  pointer-events:none; text-align:center;
+}
+.dep-name{
+  font-size:14px; font-weight:700; letter-spacing:.14em;
+  color:var(--c);
+  text-shadow:0 0 12px rgba(0,0,0,.9), 0 0 18px currentColor;
+  padding:1px 8px; border-radius:3px;
+  background:rgba(6,10,15,.55);
+  border:1px solid color-mix(in srgb, var(--c) 35%, transparent);
+  white-space:nowrap;
+}
+.dep-amt{
+  font-size:11px; color:rgba(214,229,240,.72);
+  font-variant-numeric:tabular-nums; letter-spacing:.05em;
+  text-shadow:0 0 8px rgba(0,0,0,.9);
+}
+.deposit.depleted{ filter:grayscale(1) brightness(.62); cursor:not-allowed; }
+.deposit.depleted .dep-fill{ stroke-dasharray:2 6; }
+.deposit.depleted .dep-name{ color:#8b98a5; border-color:rgba(139,152,165,.3); }
+.deposit.pulse .dep-fill{ animation:depPulse .35s ease-out; }
+@keyframes depPulse{
+  0%{ fill-opacity:.45; stroke-opacity:1; }
+  100%{ fill-opacity:.10; stroke-opacity:.42; }
+}
+
+/* 采集飘字 */
+.float-txt{
+  position:absolute; left:0; top:0;
+  transform:translate(-50%,-50%);
+  font-size:13px; font-weight:700; pointer-events:none;
+  text-shadow:0 2px 8px rgba(0,0,0,.95);
+  animation:floatUp .9s ease-out forwards;
+  z-index:30;
+}
+@keyframes floatUp{
+  0%{ opacity:0; transform:translate(-50%,-50%) scale(.7); }
+  20%{ opacity:1; transform:translate(-50%,-60%) scale(1.05); }
+  100%{ opacity:0; transform:translate(-50%,-160%) scale(1); }
+}
+
+/* ---------- 3.2 HUD ---------- */
+.hud{ position:absolute; inset:0; pointer-events:none; z-index:5; }
+.zoom-ctrl{
+  position:absolute; right:12px; top:50%; transform:translateY(-50%);
+  display:flex; flex-direction:column; gap:6px; pointer-events:auto;
+}
+.zbtn{
+  width:30px; height:30px; border-radius:5px;
+  display:grid; place-items:center;
+  background:rgba(13,20,28,.82);
+  border:1px solid var(--line);
+  color:var(--txt); font-size:14px; font-family:inherit;
+  cursor:pointer; backdrop-filter:blur(6px);
+  transition:.15s; touch-action:manipulation;
+}
+.zbtn:hover{ border-color:var(--line-2); color:var(--acc); }
+.zbtn:active{ transform:scale(.94); }
+
+.coord{
+  position:absolute; left:12px; bottom:12px;
+  font-size:10px; color:rgba(111,134,152,.8);
+  letter-spacing:.06em; font-variant-numeric:tabular-nums;
+  pointer-events:none;
+}
+
+/* 右下角种子牌：半透明，hover 才完全显形 */
+.seed-badge{
+  position:absolute; right:12px; bottom:12px;
+  padding:3px 8px; border-radius:4px;
+  font-size:10px; letter-spacing:.08em;
+  font-variant-numeric:tabular-nums;
+  color:rgba(150,180,198,.9);
+  background:rgba(9,15,21,.5);
+  border:1px solid rgba(96,196,220,.13);
+  opacity:.5; pointer-events:auto; cursor:pointer;
+  user-select:none; -webkit-user-select:none;
+  backdrop-filter:blur(4px);
+  transition:opacity .18s, border-color .18s, color .18s, background .18s;
+}
+.seed-badge:hover{
+  opacity:1; border-color:var(--line-2); color:#c8ecf6;
+}
+/* hover 时右侧浮出操作提示，说明这块是可点的 */
+.seed-badge:hover:not(.copied)::after{
+  content:"· 点击复制";
+  margin-left:4px; font-size:9px; letter-spacing:.04em; opacity:.55;
+}
+/* 复制成功的瞬时状态 */
+.seed-badge.copied{
+  opacity:1; color:#8ef0c0;
+  border-color:rgba(120,230,180,.5);
+  background:rgba(12,32,26,.75);
+}
+.seed-badge:active{ transform:scale(.97); }
+
+.toast{
+  position:absolute; left:50%; bottom:18px;
+  transform:translate(-50%,10px);
+  max-width:86%;
+  padding:7px 14px;
+  font-size:11.5px; color:#cfe3ee;
+  background:rgba(13,22,30,.94);
+  border:1px solid var(--line-2);
+  border-radius:5px;
+  box-shadow:0 10px 30px rgba(0,0,0,.6);
+  opacity:0; pointer-events:none;
+  transition:.24s; white-space:nowrap;
+}
+.toast.show{ opacity:1; transform:translate(-50%,0); }
+
+/* ============================================================
+   4. 设备节点卡片
+   ============================================================ */
+.node{
+  position:absolute; left:0; top:0;
+  width:146px;
+  padding:7px 8px 6px;
+  background:linear-gradient(165deg,#142030 0%,#0b131c 100%);
+  border:1px solid rgba(96,196,220,.22);
+  border-radius:7px;
+  box-shadow:0 10px 24px -8px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.045);
+  cursor:grab; touch-action:none;
+  transition:border-color .15s, box-shadow .15s;
+  animation:nodeIn .2s ease-out;
+}
+@keyframes nodeIn{ from{ opacity:0; } to{ opacity:1; } }
+
+.node:hover{ border-color:rgba(96,196,220,.4); }
+.node.dragging{
+  cursor:grabbing;
+  border-color:var(--acc);
+  box-shadow:0 16px 34px -10px rgba(0,0,0,.95), 0 0 0 1px rgba(79,216,232,.35), 0 0 26px -6px rgba(79,216,232,.4);
+  z-index:20;
+}
+.node.selected{
+  border-color:rgba(79,216,232,.75);
+  box-shadow:0 0 0 1px rgba(79,216,232,.45), 0 0 30px -8px rgba(79,216,232,.55);
+  z-index:15;
+}
+
+.node-head{ display:flex; align-items:center; gap:5px; margin-bottom:6px; }
+.node-led{ width:5px; height:5px; border-radius:50%; background:rgba(111,134,152,.8); flex:0 0 auto; }
+.node.selected .node-led{ background:var(--acc); box-shadow:0 0 7px var(--acc); }
+.node.active .node-led{ background:var(--ok); box-shadow:0 0 7px var(--ok); }
+.node-name{
+  flex:1; font-size:10.5px; color:#b9cbd9;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:.03em;
+}
+.node-del{
+  width:15px; height:15px; flex:0 0 auto;
+  display:grid; place-items:center;
+  border-radius:3px; border:1px solid transparent;
+  background:transparent; color:var(--txt-2);
+  font-size:12px; line-height:1; cursor:pointer;
+  opacity:0; transition:.15s; padding:0; font-family:inherit;
+}
+.node:hover .node-del,.node.selected .node-del{ opacity:1; }
+.node-del:hover{ color:var(--bad); border-color:rgba(226,96,74,.4); background:rgba(226,96,74,.12); }
+
+.node-body{ display:flex; align-items:center; gap:8px; }
+.node-ico{
+  width:34px; height:34px; flex:0 0 auto;
+  display:grid; place-items:center;
+  border-radius:5px;
+  background:rgba(79,216,232,.07);
+  border:1px solid rgba(96,196,220,.16);
+  color:var(--acc);
+}
+.node-ico svg{ width:20px; height:20px; }
+.node-meta{ font-size:9.5px; color:var(--txt-2); line-height:1.5; min-width:0; }
+.node-meta .st{ color:#8ba3b5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node-bar{
+  height:2px; margin-top:6px; border-radius:1px;
+  background:rgba(96,196,220,.12); overflow:hidden;
+}
+.node-bar i{ display:block; height:100%; width:0; background:var(--acc); transition:width .18s linear; }
+
+/* ---- 端口（接口）----
+   位置由脚本按槽位写进 left/top（百分比），所以一台设备可以有很多口。
+   空闲=暗色空心；接了线就按「道」的颜色点亮：
+     传输轨道 青 / 管道 橙 / 电力线缆 金                       */
+.port{
+  position:absolute; width:8px; height:8px;
+  transform:translate(-50%,-50%);
+  border-radius:50%; background:#0a1017;
+  border:1.5px solid rgba(96,196,220,.42);
+  cursor:crosshair; z-index:3;
+  transition:background .15s, border-color .15s, box-shadow .15s;
+}
+.port::after{ content:''; position:absolute; left:-6px; top:-6px; right:-6px; bottom:-6px; border-radius:50%; }
+.port-in{ border-color:rgba(96,196,220,.3); }
+.port-out{ background:rgba(79,216,232,.5); border-color:rgba(79,216,232,.7); }
+.node:hover .port{ border-color:var(--acc); box-shadow:0 0 7px rgba(79,216,232,.45); }
+.port.hot{
+  background:var(--acc); border-color:#fff;
+  box-shadow:0 0 14px var(--acc);
+  transform:translate(-50%,-50%) scale(1.45);
+}
+
+/* 已接线：按道着色（这是区分三种道最直观的地方） */
+.port[data-lane="belt"]{ background:#4fd8e8; border-color:#a6f2fc; box-shadow:0 0 8px rgba(79,216,232,.8); }
+.port[data-lane="pipe"]{ background:#e8913f; border-color:#ffc99a; box-shadow:0 0 8px rgba(232,145,63,.8); }
+.port[data-lane="cable"]{ background:#f5c451; border-color:#ffeda8; box-shadow:0 0 9px rgba(245,196,81,.85); }
+
+body.wiring .port-in{ animation:portPulse 1.15s ease-in-out infinite; }
+body.wiring .port-out{ opacity:.4; }
+body.wiring .port[data-lane]{ opacity:.9; animation:none; }
+@keyframes portPulse{ 50%{ box-shadow:0 0 12px rgba(79,216,232,.95); } }
+
+/* 缺电：指示灯变琥珀色 */
+.node.unpowered .node-led{ background:var(--warn); box-shadow:0 0 7px rgba(240,180,80,.75); }
+
+/* ---- 工厂核心 ---- */
+.node.core{
+  width:260px; height:260px; padding:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
+  border-radius:5px; cursor:default;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(79,216,232,.11), transparent 62%),
+    linear-gradient(160deg,#11202d,#070d14);
+  border:1px solid rgba(79,216,232,.45);
+  box-shadow:0 0 0 1px rgba(79,216,232,.12), 0 0 50px -10px rgba(79,216,232,.55),
+             inset 0 0 70px rgba(79,216,232,.05);
+}
+.node.core::before{
+  content:''; position:absolute; inset:9px;
+  border:1px dashed rgba(79,216,232,.2); pointer-events:none;
+}
+.node.core .core-ring{
+  position:absolute; left:50%; top:50%; width:168px; height:168px; margin:-84px 0 0 -84px;
+  border:1px solid rgba(79,216,232,.16); border-radius:50%;
+  animation:coreSpin 9s linear infinite;
+}
+.node.core .core-ring::after{
+  content:''; position:absolute; left:50%; top:-3px; width:6px; height:6px; margin-left:-3px;
+  border-radius:50%; background:var(--acc); box-shadow:0 0 10px var(--acc);
+}
+@keyframes coreSpin{ to{ transform:rotate(360deg); } }
+.node.core .core-ico{ position:relative; color:var(--acc); opacity:.92; }
+.node.core .core-ico svg{ width:46px; height:46px; }
+.node.core .core-name{ position:relative; font-size:13px; letter-spacing:.22em; color:#d3edf8; }
+.node.core .core-sub{ position:relative; font-size:9.5px; letter-spacing:.06em; color:rgba(140,172,192,.92); }
+.node.core .port{ width:9px; height:9px; }
+.node.core .port[data-lane]{ box-shadow:0 0 10px currentColor; }
+
+/* ---- 三种「道」：传输轨道 / 管道 / 电力线缆 ----
+   颜色统一由 --c 控制，改一处就能整体换色               */
+.lk{ pointer-events:none; --c:79,216,232; }
+.lk.belt { --c:79,216,232; }   /* 青：固体货物 */
+.lk.pipe { --c:232,145,63; }   /* 橙：液体熔液 */
+.lk.cable{ --c:245,196,81; }   /* 金：电力     */
+
+.lk-base{ fill:none; stroke:rgba(var(--c),.14); stroke-width:8; stroke-linecap:round; stroke-linejoin:round; }
+.lk-rail{ fill:none; stroke:rgba(var(--c),.34); stroke-width:1; stroke-dasharray:5 9; }
+.lk-flow{ fill:none; stroke:rgba(var(--c),.5); stroke-width:2; stroke-linecap:round;
+  stroke-dasharray:9 15; animation:lkFlow 1.1s linear infinite; }
+@keyframes lkFlow{ to{ stroke-dashoffset:-24; } }
+
+/* 管道：更粗、无虚线轨，走慢一点 */
+.lk.pipe .lk-base{ stroke-width:11; }
+.lk.pipe .lk-rail{ stroke-dasharray:none; stroke-width:1.4; }
+.lk.pipe .lk-flow{ stroke-width:3; }
+
+/* 电缆：细、快速跳动的火花 */
+.lk.cable .lk-base{ stroke-width:5; stroke:rgba(var(--c),.1); }
+.lk.cable .lk-rail{ stroke-width:1.2; stroke-dasharray:none; stroke:rgba(var(--c),.3); }
+.lk.cable .lk-flow{ stroke-width:2.2; stroke-dasharray:3 8; animation:lkSpark .5s linear infinite; }
+@keyframes lkSpark{ to{ stroke-dashoffset:-11; } }
+
+.lk-item{ pointer-events:none; }
+.wire-temp{ fill:none; stroke:rgba(79,216,232,.92); stroke-width:2; stroke-dasharray:7 7; pointer-events:none; }
+.wire-temp.pipe{ stroke:rgba(232,145,63,.95); }
+.wire-temp.cable{ stroke:rgba(245,196,81,.95); }
+
+/* 轨道铺设时给出更强的视觉引导 */
+body.wiring .viewport{ cursor:crosshair; }
+
+/* ============================================================
+   5. 底部建造栏
+   ============================================================ */
+.dock{
+  flex:0 0 auto;
+  height:var(--h-dock);
+  transition:height .28s cubic-bezier(.3,.9,.4,1);
+  display:flex; flex-direction:column;
+  background:linear-gradient(180deg,#0a1017,#070b10);
+  border-top:1px solid var(--line);
+  position:relative; z-index:40;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.dock-head{
+  display:flex; align-items:center; gap:10px;
+  padding:6px 12px;
+  border-bottom:1px solid rgba(96,196,220,.07);
+}
+.dock-title{ font-size:11px; letter-spacing:.14em; color:#8fa7b8; flex:0 0 auto; }
+.dock-sub{ font-size:10px; color:var(--txt-2); flex:1 1 auto; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dock-actions{ display:flex; gap:6px; flex:0 0 auto; }
+
+/* 三种道的颜色图例 */
+.lane-key{ display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+.lane-key b{
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:9.5px; font-weight:400; color:var(--txt-2); white-space:nowrap;
+}
+.lane-key b::before{
+  content:''; width:14px; height:2px; border-radius:1px;
+  background:var(--lc); box-shadow:0 0 7px var(--lc);
+}
+.lane-key .k-belt{ --lc:#4fd8e8; }
+.lane-key .k-pipe{ --lc:#e8913f; }
+.lane-key .k-cable{ --lc:#f5c451; }
+
+.dock-scroll{
+  flex:1 1 auto; min-height:0;
+  display:flex; align-items:flex-start; gap:9px;
+  padding:9px 12px 10px;
+  overflow-x:auto; overflow-y:hidden;
+  touch-action:pan-x;
+  scrollbar-width:thin;
+}
+.dock-scroll:empty{ display:none; }
+
+/* 建造栏空状态 */
+.dock-empty{
+  flex:1 1 auto;
+  display:none;
+  align-items:center; justify-content:center; gap:10px;
+  padding:0 16px;
+  font-size:11.5px; color:var(--txt-2); text-align:center;
+}
+.dock-empty.show{ display:flex; }
+.dock.is-empty{ height:116px; }
+.dock-empty b{ color:#a9c6d6; font-weight:600; }
+
+.dock-card{
+  position:relative;
+  flex:0 0 auto;
+  width:100px;
+  padding:8px 8px 16px;
+  display:flex; flex-direction:column; gap:5px;
+  background:linear-gradient(160deg,#16212c 0%,#0e151d 100%);
+  border:1px solid var(--line);
+  border-radius:6px;
+  cursor:grab; touch-action:pan-x;
+  transition:transform .16s cubic-bezier(.3,.9,.4,1), border-color .16s, box-shadow .16s;
+  animation:nodeIn .24s ease-out;
+}
+
+/* 物流卡按「道」着色，和画布上的线一眼对得上 */
+.dock-card[data-lane="belt"]{ --c:79,216,232; }
+.dock-card[data-lane="pipe"]{ --c:232,145,63; }
+.dock-card[data-lane="cable"]{ --c:245,196,81; }
+.dock-card[data-lane]{ border-color:rgba(var(--c),.34); }
+.dock-card[data-lane] .dc-ico{
+  color:rgb(var(--c));
+  background:radial-gradient(60% 90% at 50% 110%, rgba(var(--c),.18), transparent 70%);
+}
+.dock-card[data-lane]:hover{ border-color:rgba(var(--c),.7); box-shadow:0 10px 22px -8px rgba(0,0,0,.85), 0 0 0 1px rgba(var(--c),.25); }
+.dock-card:hover{
+  transform:translateY(-3px);
+  border-color:var(--line-2);
+  box-shadow:0 10px 22px -8px rgba(0,0,0,.85), 0 0 0 1px rgba(79,216,232,.14);
+}
+.dock-card.dragging-src{ opacity:.32; transform:none; }
+.dock-card.out{ opacity:.36; cursor:not-allowed; filter:grayscale(.7); }
+.dock-card.out:hover{ transform:none; border-color:var(--line); box-shadow:none; }
+/* 物流卡：点一下进入接线模式（不拖放） */
+.dock-card.armed{
+  border-color:rgba(79,216,232,.85);
+  box-shadow:0 0 0 1px rgba(79,216,232,.5), 0 0 22px -6px rgba(79,216,232,.75);
+  transform:translateY(-3px);
+}
+
+.dc-ico{
+  height:30px; display:grid; place-items:center;
+  color:#63d7e6;
+  background:radial-gradient(60% 90% at 50% 110%,rgba(79,216,232,.16),transparent 70%);
+  border-radius:4px;
+}
+.dc-ico svg{ width:22px; height:22px; }
+.dc-name{
+  font-size:10.5px; color:#c2d3e0; line-height:1.2;
+  text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.dc-cost{
+  display:flex; flex-wrap:wrap; justify-content:center; gap:2px 7px;
+  font-size:10px; color:#93a8b8; font-variant-numeric:tabular-nums;
+}
+.dc-cost .c{ display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+.dc-cost .c i{
+  width:7px; height:7px; border-radius:2px; background:var(--c);
+  box-shadow:0 0 6px -1px var(--c);
+}
+.dc-qty{
+  position:absolute; right:4px; bottom:3px;
+  font-size:9.5px; color:var(--txt-2);
+  letter-spacing:.02em; font-variant-numeric:tabular-nums;
+}
+
+.drag-ghost{
+  position:fixed; left:0; top:0;
+  margin:0; z-index:999;
+  pointer-events:none;
+  transform:translate(-50%,-50%) scale(.92);
+  opacity:.96;
+  border-color:var(--acc) !important;
+  box-shadow:0 20px 40px -10px rgba(0,0,0,.9), 0 0 0 1px rgba(79,216,232,.5), 0 0 34px -6px rgba(79,216,232,.5);
+  cursor:grabbing;
+}
+
+/* ============================================================
+   6. 右侧信息栏
+   ============================================================ */
+.pn-body{ padding:6px 12px 2px; }
+.pn-row{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:7px 0;
+  border-bottom:1px solid rgba(96,196,220,.06);
+  font-size:11.5px;
+}
+.pn-row span{ color:var(--txt-2); }
+.pn-row b{ color:#dfeaf3; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+.pn-row b.ok{ color:var(--ok); }
+.pn-row b.warn{ color:var(--warn); }
+.pn-row b.bad{ color:var(--bad); }
+
+.pn-tip{
+  margin:10px 12px;
+  padding:9px 10px;
+  border:1px solid rgba(94,224,160,.18);
+  border-radius:5px;
+  background:linear-gradient(160deg,rgba(94,224,160,.07),transparent 70%);
+  font-size:10.5px; color:#8fae9f; line-height:1.6;
+}
+.pn-tip b{ display:block; color:#7fd6ab; font-size:11px; margin-bottom:3px; }
+.pn-tip p{ margin:0; }
+
+.pn-actions{ padding:2px 12px 14px; display:flex; flex-direction:column; gap:6px; }
+.btn{
+  width:100%;
+  font-family:inherit; font-size:11.5px;
+  padding:7px 10px; cursor:pointer;
+  color:#b8c9d6;
+  background:rgba(15,23,33,.9);
+  border:1px solid var(--line);
+  border-radius:4px;
+  transition:.15s; touch-action:manipulation;
+}
+.btn:hover{ color:#9fe3ee; border-color:var(--line-2); background:rgba(79,216,232,.08); }
+.btn.danger:hover{ color:#ffb4a6; border-color:rgba(226,96,74,.45); background:rgba(226,96,74,.1); }
+.btn:active{ transform:scale(.99); }
+
+.backdrop{
+  position:fixed; inset:0; z-index:65;
+  background:rgba(2,5,9,.62);
+  backdrop-filter:blur(2px);
+  opacity:0; pointer-events:none;
+  transition:opacity .24s;
+}
+
+/* ============================================================
+   7. 科技树面板
+   ============================================================ */
+.tech-modal{
+  position:fixed; inset:0; z-index:200;
+  display:none;
+  align-items:center; justify-content:center;
+  padding:16px;
+  background:rgba(3,6,10,.78);
+  backdrop-filter:blur(4px);
+}
+.tech-modal.open{ display:flex; animation:fadeIn .18s ease-out; }
+@keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
+
+.tech-panel{
+  width:min(940px,100%);
+  height:min(572px,100%);
+  display:flex; flex-direction:column;
+  background:linear-gradient(180deg,#0c141d,#080d13);
+  border:1px solid var(--line-2);
+  border-radius:8px;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.9), 0 0 0 1px rgba(79,216,232,.08);
+  overflow:hidden;
+  animation:techIn .24s cubic-bezier(.3,.9,.4,1);
+}
+@keyframes techIn{ from{ opacity:0; transform:translateY(12px) scale(.985); } to{ opacity:1; transform:none; } }
+
+.tech-head{
+  flex:0 0 auto;
+  display:flex; align-items:center; gap:10px;
+  padding:11px 14px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(16,24,33,.98),rgba(11,17,25,.9));
+}
+.tech-head h3{
+  margin:0; font-size:13px; font-weight:600; letter-spacing:.1em; color:#cfe2ee;
+}
+.tech-head .sub{ font-size:10.5px; color:var(--txt-2); flex:1 1 auto; }
+.tech-swipe{ display:none; font-size:10px; color:var(--txt-2); letter-spacing:.06em; }
+.tech-close{
+  width:26px; height:26px; border-radius:4px;
+  background:transparent; border:1px solid var(--line);
+  color:var(--txt-2); font-size:15px; line-height:1; cursor:pointer;
+  font-family:inherit; transition:.15s;
+}
+.tech-close:hover{ color:var(--bad); border-color:rgba(226,96,74,.45); background:rgba(226,96,74,.1); }
+
+.tech-body{
+  flex:1 1 auto; min-height:0;
+  overflow:auto;
+  padding:18px;
+  background:
+    radial-gradient(60% 60% at 50% 0%,rgba(79,216,232,.05),transparent 70%),
+    repeating-linear-gradient(0deg,rgba(90,200,220,.035) 0 1px,transparent 1px 40px),
+    repeating-linear-gradient(90deg,rgba(90,200,220,.035) 0 1px,transparent 1px 40px);
+}
+.tech-canvas{ position:relative; width:840px; height:440px; margin:0 auto; }
+.tech-lines{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+
+.tech-node{
+  position:absolute;
+  width:172px;
+  padding:9px 10px 8px;
+  display:flex; flex-direction:column; gap:5px;
+  background:linear-gradient(160deg,#131d28,#0b131b);
+  border:1px solid var(--line);
+  border-radius:6px;
+  font-family:inherit; text-align:left;
+  color:var(--txt); cursor:pointer;
+  transition:.16s;
+}
+.tech-node:hover{ transform:translateY(-2px); }
+
+.tn-top{ display:flex; align-items:center; gap:7px; }
+.tn-ico{
+  width:26px; height:26px; flex:0 0 auto; border-radius:4px;
+  display:grid; place-items:center;
+  background:rgba(79,216,232,.08);
+  border:1px solid rgba(96,196,220,.16);
+  color:var(--acc);
+}
+.tn-ico svg{ width:16px; height:16px; }
+.tn-name{ font-size:11.5px; font-weight:600; color:#cadcea; line-height:1.2; }
+.tn-desc{ font-size:9.5px; color:var(--txt-2); line-height:1.4; min-height:26px; }
+.tn-cost{ display:flex; flex-wrap:wrap; gap:5px; font-size:9.5px; color:#93a8b8; line-height:1.5; }
+.tn-cost .c{ display:inline-flex; align-items:center; gap:2px; white-space:nowrap; }
+.tn-cost .c i{ width:6px; height:6px; border-radius:2px; background:var(--c); flex:0 0 auto; }
+.tn-cost .c{ font-variant-numeric:tabular-nums; }
+.tn-cost b{ font-weight:600; color:var(--ok); }
+.tn-cost .need{ color:var(--txt-2); }
+.tn-cost .sep{ color:rgba(111,134,152,.5); margin:0; }
+.tn-cost .c.lack{ color:var(--bad); }
+.tn-cost .c.lack b{ color:var(--bad); }
+.tn-cost .c.lack i{ box-shadow:0 0 6px -1px var(--bad); }
+.tn-foot{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top:1px; padding-top:5px; border-top:1px solid rgba(96,196,220,.08);
+  font-size:9.5px; letter-spacing:.06em;
+}
+.tn-state{ color:var(--txt-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px; }
+.tn-tier{ color:rgba(111,134,152,.7); }
+
+.tech-node.ready{ border-color:rgba(79,216,232,.5); box-shadow:0 0 20px -8px rgba(79,216,232,.5); }
+.tech-node.ready .tn-state{ color:var(--acc); }
+.tech-node.ready:hover{ border-color:var(--acc); box-shadow:0 0 0 1px rgba(79,216,232,.4), 0 0 26px -6px rgba(79,216,232,.55); }
+.tech-node.poor .tn-state{ color:var(--warn); }
+.tech-node.locked{ opacity:.52; cursor:not-allowed; }
+.tech-node.locked:hover{ transform:none; }
+.tech-node.done{
+  border-color:rgba(94,224,160,.42); cursor:default;
+  background:linear-gradient(160deg,rgba(94,224,160,.09),rgba(11,19,27,.95) 70%);
+}
+.tech-node.done:hover{ transform:none; }
+.tech-node.done .tn-state{ color:var(--ok); }
+.tech-node.done .tn-ico{ color:var(--ok); background:rgba(94,224,160,.1); border-color:rgba(94,224,160,.25); }
+.tech-node.just-unlocked{ animation:unlockFlash .7s ease-out; }
+@keyframes unlockFlash{
+  0%{ box-shadow:0 0 0 0 rgba(94,224,160,.9); }
+  100%{ box-shadow:0 0 0 22px rgba(94,224,160,0); }
+}
+
+/* ============================================================
+   8. 全屏界面：主菜单 / 新游戏 / 设置 / 暂停
+   ============================================================ */
+.screen{
+  position:fixed; inset:0; z-index:300;
+  display:none; align-items:center; justify-content:center;
+  padding:20px; overflow:auto;
+  background:#05080c;
+  animation:fadeIn .2s ease-out;
+}
+.screen.on{ display:flex; }
+.screen.pause{ background:rgba(4,7,11,.84); backdrop-filter:blur(7px); }
+
+/* ---- 主菜单 ---- */
+#screenMenu{
+  background:
+    radial-gradient(72% 52% at 50% 8%,rgba(79,216,232,.12),transparent 62%),
+    radial-gradient(50% 40% at 82% 92%,rgba(160,120,240,.07),transparent 70%),
+    linear-gradient(180deg,#070c12,#03060a);
+}
+#screenMenu::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(to right,rgba(90,200,220,.055) 1px,transparent 1px),
+    linear-gradient(to bottom,rgba(90,200,220,.055) 1px,transparent 1px);
+  background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(62% 58% at 50% 42%,#000 10%,transparent 78%);
+  mask-image:radial-gradient(62% 58% at 50% 42%,#000 10%,transparent 78%);
+}
+.menu-wrap{
+  position:relative; z-index:2;
+  width:min(560px,100%);
+  display:flex; flex-direction:column; gap:16px;
+}
+.menu-logo{ text-align:center; padding:12px 0 6px; }
+.logo-mark{
+  font-size:34px; color:var(--acc); line-height:1;
+  text-shadow:0 0 26px rgba(79,216,232,.75);
+  animation:logoPulse 4s ease-in-out infinite;
+}
+@keyframes logoPulse{ 0%,100%{ opacity:.85; } 50%{ opacity:1; } }
+.menu-logo h1{
+  margin:10px 0 4px; font-size:24px; font-weight:700;
+  letter-spacing:.28em; text-indent:.28em; color:#e6f3fa;
+}
+.menu-logo p{
+  margin:0; font-size:10.5px; letter-spacing:.22em; color:var(--txt-2);
+}
+
+.save-list{ display:flex; flex-direction:column; gap:8px; }
+.save-empty{
+  padding:26px 16px; text-align:center;
+  border:1px dashed var(--line); border-radius:8px;
+  font-size:11.5px; color:var(--txt-2); line-height:1.8;
+}
+.save-card{
+  display:flex; align-items:center; gap:10px;
+  padding:11px 12px;
+  border:1px solid var(--line); border-radius:7px;
+  background:linear-gradient(160deg,#101a24,#0a1118);
+  cursor:pointer;
+  transition:.16s;
+}
+.save-card:hover{
+  border-color:var(--line-2);
+  background:linear-gradient(160deg,#13202c,#0b131b);
+  box-shadow:0 8px 22px -12px rgba(0,0,0,.9), 0 0 0 1px rgba(79,216,232,.1);
+}
+.save-main{ flex:1 1 auto; min-width:0; }
+.save-title{ display:flex; align-items:center; gap:8px; margin-bottom:3px; }
+.save-title b{
+  font-size:13px; color:#dceaf4; font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;
+}
+.badge{
+  font-size:9px; letter-spacing:.08em; padding:1px 6px; border-radius:3px;
+  border:1px solid var(--line); color:var(--txt-2); flex:0 0 auto;
+}
+.badge.survival{ color:#7fd6e4; border-color:rgba(79,216,232,.35); background:rgba(79,216,232,.08); }
+.badge.sandbox{ color:#c9aef7; border-color:rgba(170,130,240,.35); background:rgba(170,130,240,.1); }
+.save-meta{
+  font-size:10.5px; color:var(--txt-2);
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.save-del{
+  flex:0 0 auto; font-family:inherit; font-size:10.5px;
+  padding:5px 9px; border-radius:4px; cursor:pointer;
+  color:var(--txt-2); background:transparent;
+  border:1px solid var(--line); transition:.16s;
+}
+.save-del:hover{ color:#ffb4a6; border-color:rgba(226,96,74,.45); background:rgba(226,96,74,.1); }
+.save-del.armed{ color:#fff; background:rgba(226,96,74,.8); border-color:rgba(226,96,74,.9); }
+
+.menu-actions{ display:flex; flex-direction:column; gap:9px; }
+.menu-actions .mbtn{ width:100%; padding:13px 16px; font-size:13px; letter-spacing:.1em; text-indent:.1em; }
+.menu-foot{ text-align:center; font-size:9.5px; color:rgba(111,134,152,.6); letter-spacing:.08em; }
+
+/* ---- 通用按钮 ---- */
+.mbtn{
+  font-family:inherit; font-size:12px; color:var(--txt);
+  padding:8px 16px; border-radius:5px; cursor:pointer;
+  background:rgba(15,23,33,.9); border:1px solid var(--line);
+  transition:.16s; white-space:nowrap;
+  touch-action:manipulation;
+}
+.mbtn:hover{ border-color:var(--line-2); color:#d6f4fb; background:rgba(79,216,232,.08); }
+.mbtn:active{ transform:scale(.98); }
+.mbtn.primary{
+  color:#bdf1fa;
+  background:linear-gradient(180deg,rgba(79,216,232,.2),rgba(79,216,232,.07));
+  border-color:rgba(79,216,232,.5);
+  box-shadow:0 0 20px -10px rgba(79,216,232,.9);
+}
+.mbtn.primary:hover{ background:linear-gradient(180deg,rgba(79,216,232,.3),rgba(79,216,232,.12)); }
+.mbtn.danger{ color:#e8a89c; border-color:rgba(226,96,74,.3); }
+.mbtn.danger:hover{ color:#ffb4a6; background:rgba(226,96,74,.12); border-color:rgba(226,96,74,.5); }
+.mbtn.tiny{ padding:5px 10px; font-size:10.5px; }
+
+/* ---- 对话框 ---- */
+.dlg{
+  width:min(680px,100%);
+  max-height:100%;
+  display:flex; flex-direction:column;
+  background:linear-gradient(180deg,#0c141d,#080d13);
+  border:1px solid var(--line-2);
+  border-radius:9px;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.92), 0 0 0 1px rgba(79,216,232,.06);
+  overflow:hidden;
+  animation:techIn .22s cubic-bezier(.3,.9,.4,1);
+}
+.dlg.narrow{ width:min(430px,100%); }
+.dlg-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:13px 16px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(16,24,33,.98),rgba(11,17,25,.9));
+}
+.dlg-head h2{ margin:0; font-size:14px; font-weight:600; letter-spacing:.12em; color:#d3e6f1; }
+.dlg-body{ padding:16px; overflow:auto; display:flex; flex-direction:column; gap:12px; flex:1 1 auto; min-height:0; }
+.dlg-foot{
+  display:flex; justify-content:flex-end; gap:10px;
+  padding:12px 16px;
+  border-top:1px solid var(--line);
+  background:rgba(8,13,19,.7);
+}
+.pclose{
+  width:26px; height:26px; border-radius:4px; flex:0 0 auto;
+  background:transparent; border:1px solid var(--line);
+  color:var(--txt-2); font-size:15px; line-height:1; cursor:pointer;
+  font-family:inherit; transition:.15s;
+}
+.pclose:hover{ color:var(--bad); border-color:rgba(226,96,74,.45); background:rgba(226,96,74,.1); }
+
+/* ---- 新游戏 ---- */
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field span{ font-size:10.5px; color:var(--txt-2); letter-spacing:.08em; }
+.field input{
+  width:100%; padding:9px 11px;
+  font-family:inherit; font-size:13px; color:#e2eef7;
+  background:rgba(8,13,19,.9);
+  border:1px solid var(--line); border-radius:5px;
+  outline:none; transition:.15s;
+}
+.field input:focus{ border-color:rgba(79,216,232,.55); box-shadow:0 0 0 3px rgba(79,216,232,.09); }
+
+/* 世界种子输入行 */
+.seed-row{ display:flex; gap:8px; }
+.seed-row input{ flex:1 1 auto; min-width:0; }
+.seed-hint{
+  font-style:normal; font-size:10px; color:var(--txt-2);
+  letter-spacing:.02em; font-variant-numeric:tabular-nums;
+}
+.seed-hint.set{ color:#7fd6e4; }
+
+.modes{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.mode-card{
+  text-align:left; font-family:inherit; color:var(--txt);
+  padding:13px; border-radius:7px; cursor:pointer;
+  background:linear-gradient(160deg,#101a24,#0a1118);
+  border:1px solid var(--line);
+  transition:.16s;
+}
+.mode-card:hover{ border-color:var(--line-2); }
+.mode-card.on{
+  border-color:rgba(79,216,232,.6);
+  background:linear-gradient(160deg,rgba(79,216,232,.12),rgba(10,17,24,.95));
+  box-shadow:0 0 0 1px rgba(79,216,232,.25), 0 0 26px -12px rgba(79,216,232,.9);
+}
+.mode-top{ display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+.mode-ico{
+  width:22px; height:22px; border-radius:4px; display:grid; place-items:center;
+  font-size:12px; color:var(--acc);
+  background:rgba(79,216,232,.1); border:1px solid rgba(96,196,220,.2);
+}
+.mode-top b{ font-size:13px; color:#dceaf4; }
+.mode-top em{
+  margin-left:auto; font-style:normal; font-size:9px; letter-spacing:.06em;
+  color:var(--txt-2); border:1px solid var(--line); border-radius:3px; padding:1px 5px;
+}
+.mode-card p{ margin:0 0 8px; font-size:10.5px; color:var(--txt-2); line-height:1.6; }
+.mode-card ul{ margin:0; padding-left:14px; font-size:10.5px; color:#8ea6b7; line-height:1.7; }
+
+/* ---- 设置 ---- */
+.set-row{
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:11px 0; border-bottom:1px solid rgba(96,196,220,.07);
+}
+.set-row b{ display:block; font-size:12.5px; color:#d3e3ef; font-weight:600; margin-bottom:2px; }
+.set-row span{ font-size:10.5px; color:var(--txt-2); line-height:1.5; }
+.set-sep{ height:1px; background:var(--line); margin:2px 0; }
+.set-tip{ margin:0; font-size:10px; color:rgba(111,134,152,.75); line-height:1.6; }
+
+.switch{
+  position:relative; flex:0 0 auto;
+  width:40px; height:22px; border-radius:11px;
+  background:rgba(96,196,220,.14);
+  border:1px solid var(--line);
+  cursor:pointer; transition:.2s; padding:0;
+}
+.switch::after{
+  content:""; position:absolute; top:2px; left:2px;
+  width:16px; height:16px; border-radius:50%;
+  background:#6d8496; transition:.2s;
+}
+.switch.on{ background:rgba(79,216,232,.28); border-color:rgba(79,216,232,.55); }
+.switch.on::after{
+  left:20px; background:var(--acc);
+  box-shadow:0 0 10px rgba(79,216,232,.85);
+}
+
+/* ---- 暂停 ---- */
+.pause-save-name{ font-size:10.5px; color:var(--txt-2); letter-spacing:.06em; }
+.pause-body{ gap:9px; }
+.pause-body .mbtn{ padding:11px; font-size:12.5px; }
+
+/* ---- 设置联动 ---- */
+body.no-grid .viewport{ background-image:none !important; }
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after{
+  animation-duration:.001ms !important;
+  transition-duration:.001ms !important;
+}
+
+/* ============================================================
+   9. 响应式
+   ============================================================ */
+@media (max-width:767px){
+  :root{ --h-top:44px; --h-dock:152px; }
+
+  .lane-key{ display:none; }
+
+  .only-mobile{ display:grid !important; }
+  .topbar{ gap:4px; padding:0 8px; }
+  .brand{ padding-right:4px; gap:6px; }
+  .brand-sub{ display:none; }
+  .brand-name{ font-size:11.5px; letter-spacing:.02em; }
+  .stat{ padding:0 8px; }
+  .stat .k{ font-size:9px; letter-spacing:.02em; }
+  .stat b{ font-size:11.5px; }
+  .stat b small{ font-size:9px; }
+  .stat:nth-child(4){ display:none; }
+  .tbtn{ padding:5px 8px; font-size:10.5px; }
+
+  .layout{ grid-template-columns:minmax(0,1fr); }
+
+  .panel{
+    position:fixed; top:var(--h-top); bottom:0;
+    width:min(80vw,296px);
+    z-index:70;
+    transform:translateX(-102%);
+    transition:transform .26s cubic-bezier(.3,.85,.35,1);
+    box-shadow:0 0 40px rgba(0,0,0,.7);
+    border-right:1px solid var(--line-2);
+    padding-bottom:env(safe-area-inset-bottom);
+    will-change:transform;
+  }
+  .panel-right{
+    left:auto; right:0;
+    border-left:1px solid var(--line-2); border-right:0;
+    transform:translateX(102%);
+  }
+  body.drawer-left .panel-left{ transform:translateX(0); }
+  body.drawer-right .panel-right{ transform:translateX(0); }
+  body.drawer-left .backdrop,
+  body.drawer-right .backdrop{ opacity:1; pointer-events:auto; }
+
+  .dock-head{ padding:5px 10px; }
+  .dock.is-empty{ height:104px; }
+  .dock-sub{ display:none; }
+  .dock-scroll{ padding:8px 10px 9px; gap:8px; }
+  .dock-card{ width:90px; padding:7px 6px 15px; gap:4px; }
+  .dc-ico{ height:26px; }
+  .dc-ico svg{ width:19px; height:19px; }
+  .dc-name{ font-size:10px; }
+  .dc-cost{ font-size:9.5px; gap:5px; }
+
+  .zoom-ctrl{ right:8px; gap:5px; }
+  .zbtn{ width:28px; height:28px; }
+  .coord{ left:8px; bottom:8px; font-size:9px; }
+  .toast{ bottom:12px; font-size:11px; }
+
+  .node{ width:132px; }
+
+  /* 科技树全屏 */
+  .tech-modal{ padding:0; }
+  .tech-panel{ width:100%; height:100%; border-radius:0; border:0; }
+  .tech-head{ padding:10px 12px; gap:8px; }
+  .tech-head .sub{ display:none; }
+  .tech-swipe{ display:block; flex:1 1 auto; text-align:right; }
+  .tech-body{ padding:14px 12px; display:flex; }
+  .tech-canvas{ width:840px; height:440px; margin:auto; }
+
+  /* 全屏界面在手机上更紧凑 */
+  .screen{ padding:12px; }
+  .menu-logo{ padding-top:4px; }
+  .menu-logo h1{ font-size:20px; letter-spacing:.2em; text-indent:.2em; }
+  .logo-mark{ font-size:28px; }
+  .save-title b{ max-width:140px; }
+  .modes{ grid-template-columns:1fr; }
+  .dlg{ max-height:calc(100dvh - 24px); }
+  .dlg-body{ padding:13px; }
+  .menu-actions{ gap:8px; }
+  .tech-node{ width:158px; }
+  .tn-cost{ font-size:9px; gap:4px; }
+}
+
+@media (max-width:360px){
+  .brand-name{ display:none; }
+  .dock-card{ width:80px; }
+}
+
+@media (max-height:540px){
+  :root{ --h-top:40px; --h-dock:124px; }
+  .dock-head{ padding:3px 10px; }
+  .dock-scroll{ padding:6px 10px 7px; }
+  .dock-card{ width:86px; padding:6px 6px 13px; gap:3px; }
+  .dc-ico{ height:22px; }
+  .dc-ico svg{ width:17px; height:17px; }
+  .dc-name{ font-size:9.5px; }
+  .dc-cost{ font-size:9px; gap:5px; }
+  .dc-qty{ font-size:9px; }
+  .task-hint{ display:none; }
+  .tech-panel{ height:100%; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ 顶部状态栏 ============ -->
+  <header class="topbar">
+    <button class="brand" id="btnMenu" title="菜单 / 存档 / 设置">
+      <span class="brand-mark">◈</span>
+      <span class="brand-name">深空矩阵</span>
+      <span class="brand-sub">DEEP SPACE MATRIX</span>
+      <span class="brand-caret">⌄</span>
+    </button>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="k">电网负载</span>
+        <b><span id="sLoad">0</span><i> / <span id="sSupply">0</span> kW</i></b>
+      </div>
+      <div class="stat">
+        <span class="k">供电效率</span>
+        <b class="ok" id="sEff">100%</b>
+      </div>
+      <div class="stat">
+        <span class="k">采集速率</span>
+        <b><span id="sRate">0.0</span><small> /min</small></b>
+      </div>
+      <div class="stat">
+        <span class="k">运行时长</span>
+        <b id="sTime">00:00</b>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="tbtn only-mobile" id="btnLeft">物资</button>
+      <button class="tbtn only-mobile" id="btnRight">网络</button>
+    </div>
+  </header>
+
+  <!-- ============ 主体 ============ -->
+  <main class="layout">
+
+    <!-- 左：物资 -->
+    <aside class="panel panel-left" id="panelLeft">
+      <div class="p-head"><h2>母星物资托盘</h2><span class="p-tag" id="modeTag">生存</span></div>
+      <div class="res-list" id="resList"></div>
+
+      <div class="p-sep"></div>
+      <div class="p-head"><h2>当前任务</h2><span class="p-tag live" id="taskTag">0 / 4</span></div>
+      <div class="task">
+        <div class="task-title">从零开始</div>
+        <ul class="task-list" id="taskList">
+          <li data-k="click">长按采集 10 次</li>
+          <li data-k="tool">解锁「工具升级」开采石料</li>
+          <li data-k="miner">解锁「采矿技术」并部署采矿机</li>
+          <li data-k="auto">铺轨道把矿石送回工厂核心</li>
+          <li data-k="power">用电缆给设备供电</li>
+        </ul>
+        <div class="task-hint">提示：徒手只能砍伐<b>木材</b>，长按矿区 3 秒采一次；解锁工具升级后才能挖<b>石料</b>，铁铜煤银则必须靠采矿机。采矿机不会直接产资源——矿石要用<b>传输轨道</b>运回中央的工厂核心才算入库。没接<b>电力线缆</b>的设备只能限速运行。</div>
+      </div>
+
+      <div class="p-head"><h2>操作速查</h2></div>
+      <div class="task">
+        <ul class="task-list">
+          <li>长按矿脉 3 秒 = 采集一次</li>
+          <li>按住继续不松手 = 循环采集</li>
+          <li>拖动空白处平移 · 滚轮/双指缩放</li>
+          <li>每台设备 <b>4 个接口</b>（左边进、右边出），核心 <b>12 个</b></li>
+          <li>从<b>输出接口</b>拖到<b>输入接口</b> = 铺一条道</li>
+          <li>点<b>输入接口</b> = 断开那一条线</li>
+          <li>三种道：轨道运固体 · 管道运熔液 · 电缆送电</li>
+          <li>选中设备后按 Delete 拆除</li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- 中：无限画布 -->
+    <section class="stage">
+      <div class="viewport" id="viewport">
+        <div class="world" id="world">
+          <!-- 连线层：第四阶段绘制贝塞尔曲线 -->
+          <svg class="link-layer" id="linkLayer" width="1" height="1"></svg>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div class="zoom-ctrl">
+          <button class="zbtn" id="zIn" title="放大">+</button>
+          <button class="zbtn" id="zOut" title="缩小">−</button>
+          <button class="zbtn" id="zFit" title="回到原点">◎</button>
+        </div>
+        <div class="coord" id="coord">X 0 · Y 0 · 100%</div>
+        <div class="seed-badge" id="seedBadge" title="点击复制世界种子">SEED —</div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </section>
+
+    <!-- 右：生产网络 -->
+    <aside class="panel panel-right" id="panelRight">
+      <div class="p-head"><h2>行星生产网络</h2><span class="p-tag live" id="netTag">● 在线</span></div>
+
+      <div class="pn-body">
+        <div class="pn-row"><span>已解锁科技</span><b id="rTech">0 / 6</b></div>
+        <div class="pn-row"><span>生产节点数</span><b id="rNodes">0</b></div>
+        <div class="pn-row"><span>已部署设备</span><b id="rDev">0</b></div>
+        <div class="pn-row"><span>物流连接数</span><b id="rLinks">0</b></div>
+        <div class="pn-row"><span>电网负载</span><b id="rLoad">0 kW</b></div>
+        <div class="pn-row"><span>供电效率</span><b class="ok" id="rEff">100%</b></div>
+        <div class="pn-row"><span>采集速率</span><b id="rRate">0.0 /min</b></div>
+        <div class="pn-row"><span>累计采集</span><b id="rTotal">0</b></div>
+      </div>
+
+      <div class="pn-tip">
+        <b>调试提示</b>
+        <p>双击画布空白处可一键复位视图；移动端可点顶栏「物资 / 网络」展开两侧面板。</p>
+      </div>
+
+      <div class="pn-actions">
+        <button class="btn" id="btnTech">打开科技树</button>
+        <button class="btn danger" id="btnClear">清空画布</button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============ 底部建造栏 ============ -->
+  <footer class="dock">
+    <div class="dock-head">
+      <span class="dock-title">建造栏</span>
+      <span class="dock-sub">按住卡片拖入画布 · 或点击卡片快速投放</span>
+      <div class="lane-key">
+        <b class="k-belt">轨道</b>
+        <b class="k-pipe">管道</b>
+        <b class="k-cable">电缆</b>
+      </div>
+      <div class="dock-actions">
+        <button class="tbtn" id="btnTech2">科技树<i class="dot" id="techDot"></i></button>
+        <button class="tbtn" id="btnSupply">补给 +</button>
+      </div>
+    </div>
+    <div class="dock-scroll" id="dockScroll"></div>
+    <div class="dock-empty" id="dockEmpty">
+      <span>尚未解锁任何设备 — 打开 <b>科技树</b> 研究第一项技术</span>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ 科技树弹窗 ============ -->
+<div class="tech-modal" id="techModal">
+  <div class="tech-panel">
+    <div class="tech-head">
+      <h3>科技树</h3>
+      <span class="sub">解锁前置科技后才能研究后续节点 · 材料显示为「现有 / 所需」</span>
+      <span class="tech-swipe">← 左右滑动查看 →</span>
+      <button class="tech-close" id="techClose">×</button>
+    </div>
+    <div class="tech-body" id="techBody">
+      <div class="tech-canvas" id="techCanvas">
+        <svg class="tech-lines" id="techLines"></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<!-- ==================== 主菜单 ==================== -->
+<div class="screen" id="screenMenu">
+  <div class="menu-wrap">
+    <div class="menu-logo">
+      <div class="logo-mark">◈</div>
+      <h1>深空矩阵</h1>
+      <p>DEEP SPACE MATRIX · 卡片式自动化工厂</p>
+    </div>
+
+    <div class="menu-actions">
+      <button class="mbtn primary" id="btnNewGame">＋ 新游戏</button>
+      <button class="mbtn" id="btnContinue">▸ 继续游戏</button>
+      <button class="mbtn" id="btnOpenSettings">⚙ 设置</button>
+    </div>
+    <div class="menu-foot">本地存档 · 数据保存在此浏览器</div>
+  </div>
+</div>
+
+<!-- ==================== 继续游戏 ==================== -->
+<div class="screen" id="screenContinue">
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2>继续游戏</h2>
+      <button class="pclose" data-back="menu">×</button>
+    </div>
+    <div class="dlg-body">
+      <div class="save-list" id="saveList"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="mbtn" data-back="menu">返回</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 新游戏 ==================== -->
+<div class="screen" id="screenNew">
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2>新建工厂</h2>
+      <button class="pclose" data-back="menu">×</button>
+    </div>
+    <div class="dlg-body">
+      <label class="field">
+        <span>存档名称</span>
+        <input id="newName" maxlength="16" placeholder="新工厂" autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span>世界种子</span>
+        <div class="seed-row">
+          <input id="newSeed" maxlength="24" placeholder="留空随机 · 数字或文字均可" autocomplete="off">
+          <button class="mbtn tiny" id="btnSeedRandom" type="button">随机</button>
+        </div>
+        <em class="seed-hint" id="seedHint">留空 = 随机生成一张新地图</em>
+      </label>
+
+      <div class="modes" id="modePick">
+        <button class="mode-card on" data-mode="survival">
+          <div class="mode-top"><span class="mode-ico">⛏</span><b>生存</b><em>推荐</em></div>
+          <p>从零起家：资源靠采集与矿机慢慢积累，每一次解锁都要算计。</p>
+          <ul>
+            <li>资源有限，逐级解锁科技</li>
+            <li>矿脉会枯竭</li>
+            <li>徒手只能伐木，需升级工具</li>
+          </ul>
+        </button>
+        <button class="mode-card" data-mode="sandbox">
+          <div class="mode-top"><span class="mode-ico">∞</span><b>沙盒</b><em>自由</em></div>
+          <p>资源无限，科技随意点，矿脉永不枯竭。专心搭你的流水线。</p>
+          <ul>
+            <li>所有资源恒为 ∞</li>
+            <li>矿脉永不枯竭</li>
+            <li>科技与设备免材料</li>
+          </ul>
+        </button>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button class="mbtn" data-back="menu">返回</button>
+      <button class="mbtn primary" id="btnStartGame">开始游戏</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 设置 ==================== -->
+<div class="screen" id="screenSettings">
+  <div class="dlg narrow">
+    <div class="dlg-head">
+      <h2>设置</h2>
+      <button class="pclose" data-back-settings>×</button>
+    </div>
+    <div class="dlg-body">
+      <div class="set-row">
+        <div><b>画布网格</b><span>关闭后画布只保留纯色背景</span></div>
+        <button class="switch on" data-set="grid" aria-label="画布网格"></button>
+      </div>
+      <div class="set-row">
+        <div><b>界面动效</b><span>关闭后减少动画，低配设备更流畅</span></div>
+        <button class="switch on" data-set="motion" aria-label="界面动效"></button>
+      </div>
+      <div class="set-row">
+        <div><b>自动保存</b><span>每 15 秒把进度写入本地存档</span></div>
+        <button class="switch on" data-set="autosave" aria-label="自动保存"></button>
+      </div>
+      <div class="set-sep"></div>
+      <button class="mbtn danger" id="btnWipe">清除全部存档</button>
+      <p class="set-tip">存档存放在浏览器 localStorage 中，清理浏览器数据会一并清除，重要进度请勿依赖单一设备。</p>
+    </div>
+    <div class="dlg-foot">
+      <button class="mbtn primary" data-back-settings>完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 暂停菜单 ==================== -->
+<div class="screen pause" id="screenPause">
+  <div class="dlg narrow">
+    <div class="dlg-head">
+      <h2>已暂停</h2>
+      <span class="pause-save-name" id="pauseSaveName"></span>
+    </div>
+    <div class="dlg-body pause-body">
+      <button class="mbtn primary" id="btnResume">继续游戏</button>
+      <button class="mbtn" id="btnSaveNow">保存进度</button>
+      <button class="mbtn" id="btnPauseSettings">设置</button>
+      <button class="mbtn" id="btnQuit">保存并返回主菜单</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==========================================================
+     一、静态配置：矿物 / 图标 / 设备 / 科技树
+     ========================================================== */
+
+  // ---- 六种矿物（name=资源名，label=矿脉区名）----
+  const RES = {
+    iron:   { name: '铁',   label: '铁矿', color: '#8fa8bd' },
+    copper: { name: '铜',   label: '铜矿', color: '#e08b4a' },
+    silver: { name: '银',   label: '银矿', color: '#dbeaf6' },
+    coal:   { name: '煤',   label: '煤矿', color: '#4e5766' },
+    wood:   { name: '木头', label: '木材', color: '#a3a660' },
+    stone:  { name: '石头', label: '石矿', color: '#a6afba' }
+  };
+
+  // ---- 内联 SVG 图标 ----
+  const ICONS = {
+    wind: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11.6V21"/><path d="M8.6 21h6.8"/><circle cx="12" cy="11.6" r="1.25"/><path d="M12 9.7V4.2"/><path d="M13.1 12.3 18.1 15"/><path d="M10.9 12.3 5.9 15"/></svg>',
+    miner: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 19.4 11.8 12.2"/><path d="M8.7 4.3c4.6-1.2 9.3 1.5 10.9 6"/><path d="M8.7 4.3c-1.4 1.6-1.2 3.9.4 5.3"/><path d="M19.6 10.3c-.4 2-1.9 3.4-3.9 3.6"/><path d="M9.3 14.7l3 3"/></svg>',
+    furnace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20h14"/><path d="M6.6 20V9.6L12 5l5.4 4.6V20"/><path d="M12 11.4c1.7 1.6 1.7 3.3 0 4.6-1.7-1.3-1.7-3 0-4.6z" fill="currentColor" stroke="none"/><path d="M10 20v-2M14 20v-2"/></svg>',
+    assembler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 3.2v2.4M12 18.4v2.4M3.2 12h2.4M18.4 12h2.4M5.8 5.8l1.7 1.7M16.5 16.5l1.7 1.7M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7"/></svg>',
+    hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M12 11V4.6a1.5 1.5 0 0 1 3 0V11"/><path d="M15 11V6.4a1.5 1.5 0 0 1 3 0V14c0 3.6-2.4 6-6 6s-6-2.4-6-6v-3.6a1.5 1.5 0 0 1 3 0"/></svg>',
+    rock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6.2 20 10 10.5l4 6.2 1.8-2.8L19 20z"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5.5 13.5H12l-1 7.5 7.5-10.5H12z"/></svg>',
+    belt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="8.5" width="19" height="7" rx="3.5"/><circle cx="7.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="16.5" cy="12" r="1.6"/></svg>',
+    pipe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5h6.5a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2H21"/><rect x="1.6" y="5.4" width="3.4" height="4.2" rx="1"/><rect x="19" y="14.4" width="3.4" height="4.2" rx="1"/></svg>',
+    core: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.4" y="3.4" width="17.2" height="17.2" rx="2.2"/><rect x="8.2" y="8.2" width="7.6" height="7.6" rx="1.2"/><path d="M12 3.4v4.8M12 15.8v4.8M3.4 12h4.8M15.8 12h4.8"/></svg>',
+    cable: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 8.6h5.2a2.6 2.6 0 0 1 2.6 2.6v1.6a2.6 2.6 0 0 0 2.6 2.6h2.6"/><rect x="1.2" y="6.4" width="3.4" height="4.4" rx="1.1"/><path d="M18.2 4.2v6.4M15 7.4h6.4"/><rect x="14.6" y="15.4" width="6.6" height="5" rx="1.4"/></svg>'
+  };
+
+  // ---- 设备定义（造价 / 功耗：负=耗电，正=发电）----
+  const DEFS = {
+    wind:      { name: '风力涡轮机', icon: ICONS.wind,      cost: { iron: 8,  copper: 4 },           power:  45 },
+    miner:     { name: '采矿机',     icon: ICONS.miner,     cost: { iron: 10, stone: 4 },            power: -15 },
+    furnace:   { name: '电弧熔炉',   icon: ICONS.furnace,   cost: { iron: 12, copper: 6 },           power: -30 },
+    assembler: { name: '制造台',     icon: ICONS.assembler, cost: { iron: 16, copper: 8, stone: 6 }, power: -40 }
+  };
+
+  // 科技解锁后发放的卡牌初始数量
+  const UNLOCK_STOCK = 2;
+
+  /* ---- 工厂核心：固定在地图正中的方形建筑，全厂的收货终点 ----
+     它不在建造栏出现，也不可拆除；送进来的货物直接折算成资源。 */
+  const CORE_SIZE = 260;
+  DEFS.core = { name: '工厂核心', icon: ICONS.core, cost: {}, power: 0 };
+
+  /* ---- 三种「道」：传输轨道（固体）/ 管道（液体）/ 电力线缆（电力）----
+     speed = 世界单位/秒；每铺一段消耗 1 个库存
+     lane 同时是颜色标记，见 CSS 里的 .lk.belt/.pipe/.cable 与端口着色 */
+  const LOGI = {
+    belt:  { name: '传输轨道', icon: ICONS.belt,  cost: { iron: 2, stone: 2 },  solid: true,  speed: 210, logi: true, lane: 'belt' },
+    pipe:  { name: '管道',     icon: ICONS.pipe,  cost: { iron: 2, copper: 2 }, solid: false, speed: 165, logi: true, lane: 'pipe' },
+    // 电缆每台设备都要拉一根，所以一次给的量比轨道多
+    cable: { name: '电力线缆', icon: ICONS.cable, cost: { iron: 1, copper: 2 }, solid: false, speed: 0, power: true, logi: true, lane: 'cable', bundle: 4 }
+  };
+
+  // 建造栏 / 造价提示统一查这张表（设备 + 物流）
+  const SPEC = Object.assign({}, DEFS, LOGI);
+
+  // 一次解锁给几张卡：电缆每台设备都要拉，所以给得比轨道多
+  function grantOf(type) {
+    return (LOGI[type] && LOGI[type].bundle) || UNLOCK_STOCK;
+  }
+
+  /* ---- 货物品类 ----
+     solid 决定走哪种运输：固体 → 传输轨道，液体 → 管道
+     m 记录金属种类，决定颜色与入库去向                        */
+  const ITEMS = {
+    ore:   { name: '矿石',   solid: true },
+    melt:  { name: '熔液',   solid: false },
+    ingot: { name: '金属锭', solid: true }
+  };
+  const METALS = { iron: true, copper: true, silver: true };   // 可进熔炉的金属
+  const CORE_VALUE = { ore: 1, ingot: 4 };                     // 送达核心后折算的资源量
+  const SMELT_T = 1.4;      // 熔炉：1 矿石 → 1 熔液
+  const CAST_T = 2.0;       // 制造台：2 熔液 → 1 金属锭
+  const BUF_OUT = 6;        // 设备输出缓存上限（堵了就停）
+
+  /* ---- 接口配置：in/out 为接口数量 ----
+     核心 12 个（四面各 3 个），其他设备一律 4 个：
+       左 2 = 输入，右 2 = 输出；风力涡轮机 4 个全是输出（左右各 2）
+     一个接口只能接一条线，接满就插不进去了                     */
+  const PORT_SPEC = {
+    core:      { in: 12, out: 0 },
+    miner:     { in: 2,  out: 2 },
+    furnace:   { in: 2,  out: 2 },
+    assembler: { in: 2,  out: 2 },
+    wind:      { in: 0,  out: 4 }
+  };
+
+  /* ---- 科技树 ----
+     col/row 为在科技画布中的网格坐标；needs 为前置科技 id
+     gives 表示解锁后可建造的设备类型                            */
+  const TECHS = [
+    {
+      id: 'tool', name: '工具升级', tier: 1, col: 0, row: 1,
+      icon: ICONS.rock,
+      desc: '徒手可开采石料',
+      cost: { wood: 8 },
+      needs: [],
+      effect: 'tool'
+    },
+    {
+      id: 'gather', name: '高效采集', tier: 2, col: 1, row: 0,
+      icon: ICONS.hand,
+      desc: '徒手采集产量 +1',
+      cost: { wood: 8, stone: 6 },
+      needs: ['tool'],
+      effect: 'gather'
+    },
+    {
+      id: 'miner', name: '采矿技术', tier: 2, col: 1, row: 2,
+      icon: ICONS.miner,
+      desc: '解锁采矿机',
+      cost: { wood: 10, stone: 10 },
+      needs: ['tool'],
+      gives: ['miner', 'belt']
+    },
+    {
+      id: 'power', name: '电力基础', tier: 3, col: 2, row: 0,
+      icon: ICONS.wind,
+      desc: '解锁风力涡轮机与电力线缆',
+      cost: { iron: 15, copper: 8 },
+      needs: ['miner'],
+      gives: ['wind', 'cable']
+    },
+    {
+      id: 'efficiency', name: '自动控制', tier: 3, col: 2, row: 1,
+      icon: ICONS.bolt,
+      desc: '采矿机效率翻倍',
+      cost: { iron: 30, silver: 8 },
+      needs: ['gather', 'miner'],
+      effect: 'speed'
+    },
+    {
+      id: 'smelt', name: '冶金学', tier: 3, col: 2, row: 2,
+      icon: ICONS.furnace,
+      desc: '解锁电弧熔炉',
+      cost: { iron: 25, coal: 12 },
+      needs: ['miner'],
+      gives: ['furnace', 'belt', 'pipe']
+    },
+    {
+      id: 'assemble', name: '精密制造', tier: 4, col: 3, row: 1,
+      icon: ICONS.assembler,
+      desc: '解锁制造台',
+      cost: { iron: 40, copper: 25, silver: 10 },
+      needs: ['smelt', 'power'],
+      gives: ['assembler', 'belt']
+    }
+  ];
+
+  const TECH_MAP = {};
+  TECHS.forEach(function (t) { TECH_MAP[t.id] = t; });
+
+  /* ---- 世界生成参数（种子驱动，替代原来的静态矿脉表）----
+     rings：按环带撒矿，count 数量 / r0~r1 半径范围 / amount 储量范围
+     oreTable：该环带的矿物权重表（数字越大越常见）
+     地图直径约 5000 世界单位（原来只有 2300）                      */
+  const MAP = {
+    minR: 250,        // 原点保留区半径，避免开局被矿脉糊脸
+    gap: 26,          // 矿脉之间的最小间隙
+    rings: [
+      { key: 'inner', count: 12, r0: 320,  r1: 680,  amount: [600, 900] },
+      { key: 'mid',   count: 26, r0: 740,  r1: 1460, amount: [900, 1300] },
+      { key: 'outer', count: 32, r0: 1540, r1: 2480, amount: [1300, 1900] }
+    ],
+    oreTable: {
+      inner: [['wood', 34], ['stone', 30], ['iron', 20], ['copper', 16]],
+      mid:   [['iron', 24], ['copper', 22], ['coal', 20], ['stone', 14], ['wood', 10], ['silver', 10]],
+      outer: [['iron', 20], ['copper', 18], ['coal', 17], ['silver', 26], ['wood', 9], ['stone', 10]]
+    }
+  };
+
+  // 画布参数（地图变大后放宽最小缩放，方便一眼看全图）
+  const MIN_S = 0.16, MAX_S = 2.2;
+  const NODE_W = 146, NODE_H = 82;   // 节点在世界坐标下的尺寸（用于居中落点）
+  const BASE_GATHER = 1;             // 徒手采集基础产量（每个长按周期 = 3 秒 1 个）
+  const HOLD_MS = 3000;              // 长按多久采集一次
+
+  /* ---- 徒手采集权限 ----
+     初始只能薅木材；tools 科技（工具升级）之后才能挖石料；
+     铁矿 / 铜矿 / 煤矿 / 银矿 徒手挖不动，必须靠采矿机。            */
+  const HAND_REQ = { wood: 0, stone: 1 };
+
+  /* ==========================================================
+     二、全局状态
+     ========================================================== */
+  const state = {
+    cam: { x: 0, y: 0, s: 1 },
+    nodes: [],
+    links: [],
+    seq: 1,
+
+    res: { iron: 0, copper: 0, silver: 0, coal: 0, wood: 0, stone: 0 },
+
+    deposits: [],              // 矿脉实例（运行时，含 DOM 引用）
+    layout: [],                // 本局地图布局（由种子生成，纯数据）
+    seedNum: 0,                // 世界种子（32 位无符号整数）
+    stock: {},                 // 已解锁设备卡牌库存，key 存在即代表已解锁
+    unlocked: {},              // 科技解锁表 { id: true }
+    gatherBoost: 0,            // 每次徒手采集额外产出
+    mineSpeed: 1,              // 采矿机效率倍率
+    toolLevel: 0,              // 手持工具等级：0=木制（只能砍木头）1=石制（可挖石头）
+
+    clicks: 0,                 // 徒手采集次数
+    totalGathered: 0,          // 累计采集量
+    gatherLog: [],             // 最近 60 秒的采集时间戳（算速率）
+
+    selected: null,
+    startAt: Date.now(),
+    techOpen: false,
+    wireKind: null,            // 已装上的道类型（belt / pipe / cable），null = 未选中
+    wireSrc: null,             // 正在接线的源设备
+    wireSrcPort: null,         // 从哪个输出接口拉出来的
+
+    /* ---- 存档 / 模式 ---- */
+    mode: 'survival',          // 'survival' | 'sandbox'
+    saveId: null,
+    saveName: '',
+    playing: false,            // 菜单里为 false，游戏循环停摆
+    paused: false,             // 打开任何全屏界面时暂停
+    baseTime: 0,               // 已累计的游戏秒数（暂停不计时）
+    playTime: 0
+  };
+
+  const isSandbox = function () { return state.mode === 'sandbox'; };
+
+  // 拖拽状态机：pan / pinch / node / card
+  const drag = { mode: null };
+
+  /* ==========================================================
+     三、DOM 引用
+     ========================================================== */
+  const $ = function (id) { return document.getElementById(id); };
+  const viewport = $('viewport');
+  const world = $('world');
+  const linkLayer = $('linkLayer');
+  const coordEl = $('coord');
+  const toastEl = $('toast');
+  const resList = $('resList');
+  const dockScroll = $('dockScroll');
+  const dockEmpty = $('dockEmpty');
+  const techModal = $('techModal');
+  const techCanvas = $('techCanvas');
+  const techLines = $('techLines');
+
+  /* ==========================================================
+     四、工具
+     ========================================================== */
+  const clamp = function (v, a, b) { return Math.min(b, Math.max(a, v)); };
+
+  function pointOf(e) {
+    if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  function screenToWorld(cx, cy) {
+    const r = viewport.getBoundingClientRect();
+    return {
+      x: (cx - r.left - state.cam.x) / state.cam.s,
+      y: (cy - r.top - state.cam.y) / state.cam.s
+    };
+  }
+
+  function hitViewport(cx, cy) {
+    const r = viewport.getBoundingClientRect();
+    return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
+  }
+
+  /* ---------- 复制文本 ----------
+     execCommand('copy') 虽是老 API，但它是同步的、在点击手势内就能完成，
+     file:// 直开 / 无剪贴板权限 / 页面未获焦点 都能用，所以作为首选；
+     Clipboard API 作为兜底。返回 Promise<boolean>，true 表示确实写进剪贴板了。 */
+  function execCopy(txt) {
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:-9999px;width:1px;height:1px;' +
+      'padding:0;border:0;opacity:0;pointer-events:none;font-size:16px;';
+    const prevFocus = document.activeElement;
+    document.body.appendChild(ta);
+
+    let ok = false;
+    try {
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, txt.length);   // iOS 需要显式选区
+      ok = document.execCommand('copy');
+    } catch (e) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+
+    // 归还焦点，别让隐藏 textarea 抢走键盘事件
+    if (prevFocus && prevFocus !== document.body && prevFocus.focus) {
+      try { prevFocus.focus(); } catch (e) { /* ignore */ }
+    }
+    return ok;
+  }
+
+  function copyText(txt) {
+    return new Promise(function (resolve) {
+      /* 1) 先用 execCommand —— 它是同步的，能在点击手势内直接完成，
+            不受 file:// 直开、剪贴板权限策略、页面焦点的影响，命中率最高。 */
+      if (execCopy(txt)) { resolve(true); return; }
+
+      /* 2) 兜底：Clipboard API（异步，需要安全上下文 + 用户手势） */
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          navigator.clipboard.writeText(txt).then(
+            function () { resolve(true); },
+            function () { resolve(false); }
+          );
+          return;
+        } catch (e) { /* 继续报失败 */ }
+      }
+      resolve(false);
+    });
+  }
+
+  // 伪随机（固定种子，保证矿脉形状每次一致）
+  function seededRand(seed) {
+    let s = seed;
+    return function () {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+
+  /* ---- 种子工具 ----
+     规则与 Minecraft 一致：纯数字输入直接当作种子本身；
+     文字输入则哈希成 32 位整数，所以“同一段文字 = 同一张地图”，
+     而且把界面上显示的种子号抄下来重新输入，也能复现同一张地图。 */
+
+  const SEED_MAX = 4294967296;
+
+  function seedToNum(text) {
+    const s = String(text).trim();
+    if (/^-?\d{1,11}$/.test(s)) {
+      const n = Number(s);
+      if (isFinite(n)) return ((n % SEED_MAX) + SEED_MAX) % SEED_MAX;
+    }
+    // xmur3：字符串 -> 32 位散列
+    let h = 1779033703 ^ s.length;
+    for (let i = 0; i < s.length; i++) {
+      h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+
+  // 9 位随机种子，方便肉眼记 / 口头分享
+  function randomSeed() {
+    return Math.floor(Math.random() * 900000000) + 100000000;
+  }
+
+  // mulberry32：短小、分布均匀、跨浏览器结果一致
+  function makeRNG(a) {
+    a = a >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t = (t + Math.imul(t ^ (t >>> 7), 61)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / SEED_MAX;
+    };
+  }
+
+  /* ==========================================================
+     五、相机
+     ========================================================== */
+  function renderCam() {
+    const x = state.cam.x, y = state.cam.y, s = state.cam.s;
+    world.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0) scale(' + s + ')';
+    world.style.setProperty('--lbl', clamp(0.85 / s, 1, 1.8).toFixed(3));
+    world.style.setProperty('--lbl-op', s < 0.38 ? 0 : 1);
+
+    const g1 = 40 * s, g2 = 200 * s;
+    const far = s < 0.42;
+    viewport.classList.toggle('far', far);
+
+    if (far) {
+      // 视角拉很远时只保留大网格，否则会糊成一片
+      viewport.style.backgroundSize = g2 + 'px ' + g2 + 'px, ' + g2 + 'px ' + g2 + 'px';
+      viewport.style.backgroundPosition = x + 'px ' + y + 'px, ' + x + 'px ' + y + 'px';
+    } else {
+      viewport.style.backgroundSize =
+        g1 + 'px ' + g1 + 'px, ' + g1 + 'px ' + g1 + 'px, ' + g2 + 'px ' + g2 + 'px, ' + g2 + 'px ' + g2 + 'px';
+      viewport.style.backgroundPosition =
+        x + 'px ' + y + 'px, ' + x + 'px ' + y + 'px, ' + x + 'px ' + y + 'px, ' + x + 'px ' + y + 'px';
+    }
+
+    updateCoord();
+  }
+
+  function zoomAt(cx, cy, factor) {
+    const before = screenToWorld(cx, cy);
+    const ns = clamp(state.cam.s * factor, MIN_S, MAX_S);
+    if (ns === state.cam.s) return;
+    const r = viewport.getBoundingClientRect();
+    state.cam.s = ns;
+    state.cam.x = cx - r.left - before.x * ns;
+    state.cam.y = cy - r.top - before.y * ns;
+    renderCam();
+  }
+
+  // 复位视图：世界原点居中，并根据屏幕尺寸自动选择一档缩放
+  // （手机屏幕窄，缩得小一点才能一眼看到周围几片矿脉）
+  function resetView() {
+    const r = viewport.getBoundingClientRect();
+    state.cam.s = clamp(Math.min(r.width / 1550, r.height / 1180), 0.42, 1);
+    state.cam.x = r.width / 2;
+    state.cam.y = r.height / 2;
+    renderCam();
+  }
+
+  let coordTick = 0;
+  function updateCoord() {
+    if (coordTick) return;
+    coordTick = requestAnimationFrame(function () {
+      coordTick = 0;
+      const r = viewport.getBoundingClientRect();
+      const w = screenToWorld(r.left + r.width / 2, r.top + r.height / 2);
+      coordEl.textContent = 'X ' + Math.round(w.x) + ' · Y ' + Math.round(w.y) + ' · ' + Math.round(state.cam.s * 100) + '%';
+    });
+  }
+
+  /* ==========================================================
+     六、矿脉：生成 / 渲染 / 采集
+     ========================================================== */
+
+  // 生成一圈不规则多边形顶点
+  function polyPoints(w, h, seed) {
+    const rnd = seededRand(seed);
+    const cx = w / 2, cy = h / 2, rx = w / 2 * 0.9, ry = h / 2 * 0.9;
+    const n = 9, out = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const j = 0.78 + rnd() * 0.22;
+      out.push((cx + Math.cos(a) * rx * j).toFixed(1) + ',' + (cy + Math.sin(a) * ry * j).toFixed(1));
+    }
+    return out.join(' ');
+  }
+
+  /* ---- 按权重表抽一种矿物 ---- */
+  function pickWeighted(table, rnd) {
+    let total = 0, i;
+    for (i = 0; i < table.length; i++) total += table[i][1];
+    let r = rnd() * total;
+    for (i = 0; i < table.length; i++) {
+      r -= table[i][1];
+      if (r <= 0) return table[i][0];
+    }
+    return table[table.length - 1][0];
+  }
+
+  /**
+   * 种子 -> 整张地图的矿脉布局
+   * 采用「环带 + 扇区」撒点：每个环带按角度均分成 count 份，
+   * 每份里随机抖动角度与半径，既均匀又不容易挤成一坨。
+   * @param {number} seedNum 32 位种子
+   * @returns {Array} [{ ore, x, y, w, h, amount }]
+   */
+  function genWorld(seedNum) {
+    const rnd = makeRNG(seedNum);
+    const out = [];
+    const placed = [];
+
+    function fits(x, y, w, h) {
+      if (Math.hypot(x + w / 2, y + h / 2) < MAP.minR) return false;
+      for (let i = 0; i < placed.length; i++) {
+        const t = placed[i];
+        if (x < t.x + t.w + MAP.gap && x + w + MAP.gap > t.x &&
+            y < t.y + t.h + MAP.gap && y + h + MAP.gap > t.y) return false;
+      }
+      return true;
+    }
+
+    MAP.rings.forEach(function (ring) {
+      const table = MAP.oreTable[ring.key];
+      const slot = Math.PI * 2 / ring.count;
+
+      for (let i = 0; i < ring.count; i++) {
+        // 内圈前几块固定给木头 / 石料，保证生存模式开局有活路
+        let ore;
+        if (ring.key === 'inner' && i < 2) ore = 'wood';
+        else if (ring.key === 'inner' && i < 4) ore = 'stone';
+        else ore = pickWeighted(table, rnd);
+
+        let x = 0, y = 0, w = 0, h = 0, ok = false;
+        for (let t = 0; t < 26 && !ok; t++) {
+          w = 150 + Math.round(rnd() * 80);
+          h = 140 + Math.round(rnd() * 70);
+          const a = slot * i + (rnd() - 0.5) * slot * 0.75;
+          const r = ring.r0 + rnd() * (ring.r1 - ring.r0);
+          x = Math.round(Math.cos(a) * r - w / 2);
+          y = Math.round(Math.sin(a) * r - h / 2);
+          ok = fits(x, y, w, h);
+        }
+        // 26 次都撞车（极罕见）就接受最后一次位置，宁可略有重叠也不留空洞
+        placed.push({ x: x, y: y, w: w, h: h });
+
+        const amt = ring.amount[0] + rnd() * (ring.amount[1] - ring.amount[0]);
+        out.push({
+          ore: ore, x: x, y: y, w: w, h: h,
+          amount: Math.round(amt / 10) * 10
+        });
+      }
+    });
+
+    return out;
+  }
+
+  // 换地图：卸掉旧矿脉 DOM，按新种子重新生成并挂载
+  function mountWorld(seedNum) {
+    state.deposits.forEach(function (d) { if (d.el && d.el.parentNode) d.el.remove(); });
+    state.deposits = [];
+    state.layout = genWorld(seedNum);
+    buildDeposits();
+  }
+
+  function buildDeposits() {
+    state.layout.forEach(function (d, i) {
+      const dep = {
+        id: 'd' + i,
+        ore: d.ore,
+        x: d.x, y: d.y, w: d.w, h: d.h,
+        amount: d.amount,
+        max: d.amount
+      };
+      state.deposits.push(dep);
+
+      const el = document.createElement('div');
+      el.className = 'deposit';
+      el.dataset.id = dep.id;
+      el.style.transform = 'translate(' + dep.x + 'px,' + dep.y + 'px)';
+      el.style.width = dep.w + 'px';
+      el.style.height = dep.h + 'px';
+      el.style.setProperty('--c', RES[dep.ore].color);
+
+      // 内部矿点：3~5 个小圆点，暗示矿石聚集（混入种子，换图时位置也变）
+      const rnd = seededRand((state.seedNum + i * 37 + 11) % 233280);
+      let dots = '';
+      const dotCount = 3 + Math.floor(rnd() * 3);
+      for (let k = 0; k < dotCount; k++) {
+        const px = dep.w * (0.2 + rnd() * 0.6);
+        const py = dep.h * (0.2 + rnd() * 0.6);
+        const pr = 2.5 + rnd() * 3.5;
+        dots += '<circle class="dep-dot" cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + pr.toFixed(1) + '"/>';
+      }
+
+      // 长按进度环：围绕矿区中心画一圈，radius 取区域短边的一半
+      const ringR = Math.min(dep.w, dep.h) / 2 - 7;
+      const circ = 2 * Math.PI * ringR;
+      dep.circ = circ;
+
+      el.innerHTML =
+        '<svg class="dep-poly" viewBox="0 0 ' + dep.w + ' ' + dep.h + '">' +
+          '<polygon class="dep-fill" points="' + polyPoints(dep.w, dep.h, (state.seedNum + i * 91 + 7) % 233280) + '"/>' +
+          dots +
+          '<circle class="dep-ring-bg" cx="' + (dep.w / 2) + '" cy="' + (dep.h / 2) + '" r="' + ringR + '"/>' +
+          '<circle class="dep-ring" cx="' + (dep.w / 2) + '" cy="' + (dep.h / 2) + '" r="' + ringR + '"' +
+            ' transform="rotate(-90 ' + (dep.w / 2) + ' ' + (dep.h / 2) + ')"' +
+            ' stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + circ.toFixed(1) + '"/>' +
+        '</svg>' +
+        '<div class="dep-label">' +
+          '<span class="dep-name">' + RES[dep.ore].label + '</span>' +
+          '<span class="dep-amt">' + dep.amount + '</span>' +
+        '</div>';
+
+      dep.el = el;
+      dep.labelEl = el.querySelector('.dep-amt');
+      dep.ringEl = el.querySelector('.dep-ring');
+      world.appendChild(el);
+    });
+  }
+
+  // 找到某个世界坐标点所在的矿脉（矩形近似，足够用）
+  function depositAt(wx, wy) {
+    for (let i = 0; i < state.deposits.length; i++) {
+      const d = state.deposits[i];
+      if (wx >= d.x && wx <= d.x + d.w && wy >= d.y && wy <= d.y + d.h) return d;
+    }
+    return null;
+  }
+
+  // 资源入账 + 左侧数字闪动
+  function addRes(kind, n) {
+    if (!isSandbox()) state.res[kind] += n;
+    state.totalGathered += n;
+
+    const el = $('res-' + kind);
+    if (el) {
+      el.textContent = isSandbox() ? '∞' : state.res[kind];
+      el.classList.add('up');
+      setTimeout(function () { el.classList.remove('up'); }, 180);
+    }
+    $('rTotal').textContent = state.totalGathered;
+
+    const mt = $('modeTag');
+    if (mt) {
+      mt.textContent = isSandbox() ? '沙盒' : '生存';
+      mt.className = 'p-tag' + (isSandbox() ? ' sandbox' : '');
+    }
+    state.gatherLog.push(performance.now());
+  }
+
+  // 采集飘字（挂在 world 内，跟随缩放/平移）
+  function floatText(wx, wy, text, color) {
+    const el = document.createElement('div');
+    el.className = 'float-txt';
+    el.textContent = text;
+    el.style.left = wx + 'px';
+    el.style.top = wy + 'px';
+    el.style.color = color;
+    world.appendChild(el);
+    setTimeout(function () { el.remove(); }, 900);
+  }
+
+  // 长按进度环：p = 0~1
+  function setRing(dep, p) {
+    if (!dep.ringEl) return;
+    dep.ringEl.style.strokeDashoffset = (dep.circ * (1 - p)).toFixed(1);
+  }
+
+  // 徒手能否采这种矿
+  function canHand(ore) {
+    if (isSandbox()) return true;
+    return HAND_REQ[ore] !== undefined && state.toolLevel >= HAND_REQ[ore];
+  }
+
+  // 挖不动时的提示文案（1.5 秒内不重复弹）
+  let lastHintAt = 0, lastHintMsg = '';
+  function handBlocked(ore) {
+    const msg = (ore === 'stone')
+      ? '需要先解锁「工具升级」，才能徒手开采石料'
+      : '徒手挖不动' + RES[ore].label + '，需要采矿机开采';
+    const now = performance.now();
+    if (msg !== lastHintMsg || now - lastHintAt > 1500) {
+      toast(msg);
+      lastHintMsg = msg;
+      lastHintAt = now;
+    }
+  }
+
+  // 执行一次徒手采集
+  function doGather(dep) {
+    if (!dep) return;
+    if (dep.amount <= 0 && !isSandbox()) { endPress(); toast('该矿脉已经枯竭'); return; }
+
+    const sb = isSandbox();
+    const amt = Math.min(BASE_GATHER + state.gatherBoost, sb ? 9999 : dep.amount);
+    if (!sb) dep.amount -= amt;
+    addRes(dep.ore, amt);
+    state.clicks++;
+
+    if (!sb) dep.labelEl.textContent = dep.amount;
+    dep.el.classList.remove('pulse');
+    void dep.el.offsetWidth;          // 强制重排以重播动画
+    dep.el.classList.add('pulse');
+
+    floatText(dep.x + dep.w / 2, dep.y + dep.h / 2,
+      (sb ? '+∞ ' : '+' + amt + ' ') + RES[dep.ore].name, RES[dep.ore].color);
+
+    if (dep.amount <= 0) {
+      dep.el.classList.add('depleted');
+      toast(RES[dep.ore].label + '已枯竭');
+    }
+
+    if (state.techOpen) refreshTechTree();
+    updateTask();
+    updateRate();
+  }
+
+  /* ---- 长按状态机 ----
+     按住矿脉 -> 进度环 3 秒填满 -> 采一次 -> 继续按住则循环
+     中途移动超过阈值 -> 取消长按，转为平移画布                       */
+  let press = null;
+
+  function startPress(dep, cx, cy) {
+    endPress();
+    press = { dep: dep, t0: performance.now(), raf: 0, didGather: false };
+    dep.el.classList.add('charging');
+    drag.mode = 'press';
+    drag.x0 = cx; drag.y0 = cy;
+    press.raf = requestAnimationFrame(pressLoop);
+  }
+
+  function pressLoop() {
+    if (!press) return;
+    // 兜底：手势已被别的逻辑接管（转平移 / 被系统打断），立即停止
+    if (drag.mode !== 'press') { endPress(); return; }
+    const now = performance.now();
+    const p = Math.min(1, (now - press.t0) / HOLD_MS);
+    setRing(press.dep, p);
+
+    if (p >= 1) {
+      press.didGather = true;
+      doGather(press.dep);
+      if (!press) return;                            // doGather 里可能已经 endPress
+      if (press.dep.amount <= 0) { endPress(); return; }
+      press.t0 = performance.now();                  // 继续按住 -> 下一轮
+    }
+    press.raf = requestAnimationFrame(pressLoop);
+  }
+
+  let holdHintShown = false;
+  function endPress() {
+    if (!press) return;
+    const held = performance.now() - press.t0;
+    const gathered = press.didGather;
+    cancelAnimationFrame(press.raf);
+    press.dep.el.classList.remove('charging');
+    setRing(press.dep, 0);
+    press = null;
+
+    // 只是轻点了一下：第一次提醒要长按
+    if (held < 600 && !gathered && !holdHintShown) {
+      holdHintShown = true;
+      toast('要长按矿区 3 秒才会采集，按住别松手');
+    }
+  }
+
+  /* ==========================================================
+     七、科技树
+     ========================================================== */
+  const TNODE_W = 172;
+  const COL_X = [10, 210, 410, 610];
+  const ROW_Y = [16, 158, 300];
+
+  function techState(t) {
+    if (state.unlocked[t.id]) return 'done';
+    const needOk = t.needs.every(function (n) { return state.unlocked[n]; });
+    if (!needOk) return 'locked';
+    if (isSandbox()) return 'ready';          // 沙盒：资源无限，只看前置
+    const poor = Object.keys(t.cost).some(function (k) { return state.res[k] < t.cost[k]; });
+    return poor ? 'poor' : 'ready';
+  }
+
+  /**
+   * 造价文本
+   * @param {object}  cost      { iron: 15, copper: 8 }
+   * @param {boolean} check     是否标红「资源不足」
+   * @param {boolean} withHave  是否显示「现有/所需」，科技树里用
+   */
+  function costHTML(cost, check, withHave) {
+    return Object.keys(cost).map(function (k) {
+      const need = cost[k];
+      const have = state.res[k];
+      const sb = isSandbox();
+      const lack = check && !sb && have < need;
+      const num = (withHave && !sb)
+        ? '<b>' + have + '</b><span class="sep">/</span><span class="need">' + need + '</span>'
+        : String(need);
+      return '<span class="c' + (lack ? ' lack' : '') + '" title="' +
+             RES[k].name + '：现有 ' + have + '，需要 ' + need + '">' +
+             '<i style="--c:' + RES[k].color + '"></i>' + RES[k].name + ' ' + num + '</span>';
+    }).join('');
+  }
+
+  function buildTechTree() {
+    // 节点
+    TECHS.forEach(function (t) {
+      const el = document.createElement('button');
+      el.className = 'tech-node';
+      el.dataset.id = t.id;
+      el.style.left = COL_X[t.col] + 'px';
+      el.style.top = ROW_Y[t.row] + 'px';
+      el.innerHTML =
+        '<div class="tn-top">' +
+          '<span class="tn-ico">' + t.icon + '</span>' +
+          '<span class="tn-name">' + t.name + '</span>' +
+        '</div>' +
+        '<div class="tn-desc">' + t.desc + '</div>' +
+        '<div class="tn-cost" data-cost></div>' +
+        '<div class="tn-foot"><span class="tn-state" data-state>—</span><span class="tn-tier">T' + t.tier + '</span></div>';
+      techCanvas.appendChild(el);
+      t.el = el;
+    });
+
+    // 依赖连线（贝塞尔）
+    const paths = [];
+    TECHS.forEach(function (t) {
+      t.needs.forEach(function (nid) {
+        const p = TECH_MAP[nid];
+        if (!p) return;
+        const x1 = COL_X[p.col] + TNODE_W, y1 = ROW_Y[p.row] + 30;
+        const x2 = COL_X[t.col], y2 = ROW_Y[t.row] + 30;
+        const dx = Math.max(40, (x2 - x1) / 2);
+        paths.push({
+          from: nid, to: t.id,
+          d: 'M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ',' + (x2 - dx) + ' ' + y2 + ',' + x2 + ' ' + y2
+        });
+      });
+    });
+
+    techLines.setAttribute('width', 840);
+    techLines.setAttribute('height', 440);
+    techLines.innerHTML = paths.map(function (p) {
+      return '<path class="tech-path" data-from="' + p.from + '" data-to="' + p.to + '" d="' + p.d +
+             '" fill="none" stroke="rgba(96,196,220,.30)" stroke-width="1.6" stroke-dasharray="4 4"/>';
+    }).join('');
+  }
+
+  // 刷新科技树所有节点的视觉状态
+  function refreshTechTree() {
+    TECHS.forEach(function (t) {
+      const st = techState(t);
+      const el = t.el;
+      el.className = 'tech-node ' + st;
+
+      const costEl = el.querySelector('[data-cost]');
+      costEl.innerHTML = !Object.keys(t.cost).length
+        ? '<span class="c">免费</span>'
+        : (st === 'done' ? costHTML(t.cost, false, false) : costHTML(t.cost, true, true));
+
+      const stateEl = el.querySelector('[data-state]');
+      if (st === 'done') stateEl.textContent = '✓ 已解锁';
+      else if (st === 'locked') stateEl.textContent = '需 ' + t.needs.filter(function (n) { return !state.unlocked[n]; }).map(function (n) { return TECH_MAP[n].name; }).join(' · ');
+      else if (st === 'poor') stateEl.textContent = '资源不足';
+      else stateEl.textContent = '可研究 →';
+
+      // 连线着色：前置已解锁则为亮线
+      Array.prototype.forEach.call(techLines.querySelectorAll('path[data-to="' + t.id + '"]'), function (p) {
+        const on = state.unlocked[p.dataset.from];
+        p.setAttribute('stroke', on ? 'rgba(94,224,160,.6)' : 'rgba(96,196,220,.26)');
+      });
+    });
+
+    // 红点：有可研究的科技
+    const anyReady = TECHS.some(function (t) { return techState(t) === 'ready'; });
+    $('techDot').classList.toggle('on', anyReady);
+  }
+
+  function unlockTech(id) {
+    const t = TECH_MAP[id];
+    if (!t) return;
+    const st = techState(t);
+
+    if (st === 'done') { toast('该科技已解锁'); return; }
+    if (st === 'locked') {
+      const names = t.needs.filter(function (n) { return !state.unlocked[n]; })
+                          .map(function (n) { return TECH_MAP[n].name; });
+      toast('需要先解锁：' + names.join('、'));
+      return;
+    }
+    if (st === 'poor') {
+      const lack = Object.keys(t.cost)
+        .filter(function (k) { return state.res[k] < t.cost[k]; })
+        .map(function (k) { return RES[k].name + ' ' + state.res[k] + '/' + t.cost[k]; });
+      toast('资源不足：' + lack.join('，'));
+      return;
+    }
+
+    // 扣资源（沙盒免材料）
+    if (!isSandbox()) {
+      Object.keys(t.cost).forEach(function (k) { state.res[k] -= t.cost[k]; });
+    }
+
+    state.unlocked[t.id] = true;
+
+    // 生效
+    if (t.effect === 'tool') {
+      state.toolLevel = 1;
+      toast('已解锁「工具升级」：现在可以徒手开采石料');
+      // 已有的石头矿区重新可用
+    } else if (t.effect === 'gather') {
+      state.gatherBoost += 1;
+      toast('已解锁「高效采集」：每次采集 ' + (BASE_GATHER + state.gatherBoost) + ' 单位');
+    } else if (t.effect === 'speed') {
+      state.mineSpeed *= 2;
+      toast('已解锁「自动控制」：采矿机效率 ×2');
+    } else if (t.gives) {
+      const gs = [].concat(t.gives);
+      gs.forEach(function (g) { state.stock[g] = (state.stock[g] || 0) + grantOf(g); });
+      toast('已解锁「' + t.name + '」：' + gs.map(function (g) {
+        return SPEC[g].name + ' ×' + grantOf(g);
+      }).join('、'));
+    } else {
+      toast('已解锁「' + t.name + '」');
+    }
+
+    // 动画
+    t.el.classList.add('just-unlocked');
+    setTimeout(function () { t.el.classList.remove('just-unlocked'); }, 700);
+
+    refreshTechTree();
+    renderDock();
+    updateRes();
+    updateStats();
+    updateTask();
+  }
+
+  /**
+   * 沙盒模式：一次性解锁全部科技
+   * 幂等 —— 只对「尚未解锁」的科技生效，避免读档后重复叠加加成；
+   * 不弹 toast、不播放单个解锁动画（一次全开时那样太吵）。
+   * @returns {number} 本次新解锁的数量
+   */
+  function unlockAllTechs() {
+    let added = 0;
+    TECHS.forEach(function (t) {
+      if (state.unlocked[t.id]) return;
+      state.unlocked[t.id] = true;
+      added++;
+
+      if (t.effect === 'tool') {
+        state.toolLevel = 1;
+      } else if (t.effect === 'gather') {
+        state.gatherBoost += 1;
+      } else if (t.effect === 'speed') {
+        state.mineSpeed *= 2;
+      } else if (t.gives) {
+        [].concat(t.gives).forEach(function (g) {
+          state.stock[g] = (state.stock[g] || 0) + grantOf(g);
+        });
+      }
+    });
+    return added;
+  }
+
+  function openTech(open) {
+    state.techOpen = open;
+    techModal.classList.toggle('open', open);
+    document.body.classList.remove('drawer-left', 'drawer-right');
+    if (open) {
+      refreshTechTree();
+      techBody.scrollTop = 0;
+      techBody.scrollLeft = 0;
+    }
+  }
+  const techBody = $('techBody');
+
+  /* ==========================================================
+     八、建造栏（初始为空，全靠科技解锁）
+     ========================================================== */
+  function buildCard(type) {
+    const d = SPEC[type];
+    const armed = state.wireKind === type;
+    const lane = LOGI[type] ? ' data-lane="' + LOGI[type].lane + '"' : '';
+    return (
+      '<div class="dock-card' + (armed ? ' armed' : '') + '" data-type="' + type + '"' + lane + '>' +
+        '<div class="dc-ico">' + d.icon + '</div>' +
+        '<div class="dc-name">' + d.name + '</div>' +
+        '<div class="dc-cost">' + costHTML(d.cost, false) + '</div>' +
+        '<div class="dc-qty">' + (isSandbox() ? '∞' : '×' + (state.stock[type] || 0)) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderDock() {
+    const types = Object.keys(state.stock);
+    dockScroll.innerHTML = types.map(buildCard).join('');
+    dockEmpty.classList.toggle('show', types.length === 0);
+    document.querySelector('.dock').classList.toggle('is-empty', types.length === 0);
+  }
+
+  function updateDock() {
+    Array.prototype.forEach.call(dockScroll.children, function (card) {
+      const t = card.dataset.type;
+      const n = state.stock[t] || 0;
+      card.querySelector('.dc-qty').textContent = isSandbox() ? '∞' : '×' + n;
+      card.classList.toggle('out', !isSandbox() && n <= 0);
+      card.classList.toggle('armed', state.wireKind === t);
+    });
+  }
+
+  /* ==========================================================
+     九、设备节点
+     ========================================================== */
+  function mountNode(node) {
+    const d = DEFS[node.type];
+    const isCore = node.type === 'core';
+
+    const el = document.createElement('div');
+    el.className = 'node' + (isCore ? ' core' : '');
+    el.dataset.id = node.id;
+    el.style.transform = 'translate(' + node.x + 'px,' + node.y + 'px)';
+
+    if (isCore) {
+      el.style.width = CORE_SIZE + 'px';
+      el.style.height = CORE_SIZE + 'px';
+      el.innerHTML =
+        '<div class="core-ring"></div>' +
+        '<div class="core-ico">' + ICONS.core + '</div>' +
+        '<div class="core-name">工厂核心</div>' +
+        '<div class="core-sub">物流中枢 · 等待来料</div>';
+    } else {
+      el.innerHTML =
+        '<div class="node-head">' +
+          '<span class="node-led"></span>' +
+          '<span class="node-name">' + d.name + '</span>' +
+          '<button class="node-del" title="拆除">×</button>' +
+        '</div>' +
+        '<div class="node-body">' +
+          '<div class="node-ico">' + d.icon + '</div>' +
+          '<div class="node-meta">' +
+            '<div class="st">待机</div>' +
+            '<div class="cnt">0 / 0</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="node-bar"><i></i></div>';
+    }
+
+    world.appendChild(el);
+    node.el = el;
+    node.stText = el.querySelector(isCore ? '.core-sub' : '.st');
+    node.cntEl = el.querySelector(isCore ? '.core-sub' : '.cnt');
+    node.barEl = el.querySelector('.node-bar i');
+    node.w = el.offsetWidth;
+    node.h = el.offsetHeight;
+    node.inBuf = node.inBuf || [];
+    node.outBuf = node.outBuf || [];
+
+    buildPorts(node, el);
+    refreshPorts(node);
+
+    if (!isCore) {
+      el.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('.node-del')) return;
+        if (e.target.closest('.port')) return;       // 端口自己处理接线
+        if (isTouchEmulation()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        beginNodeDrag(node, e.clientX, e.clientY);
+      });
+
+      el.addEventListener('touchstart', function (e) {
+        if (e.target.closest('.node-del')) return;
+        if (e.target.closest('.port')) return;
+        if (e.touches.length > 1) return;
+        e.stopPropagation();
+        const p = pointOf(e);
+        beginNodeDrag(node, p.x, p.y);
+      }, { passive: true });
+
+      el.querySelector('.node-del').addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeNode(node.id);
+      });
+    }
+
+    return el;
+  }
+
+  /* ---- 接口槽位：把「某台设备有几个口、分别在哪条边」算成一份表 ---- */
+  function slotT(n, i) {
+    return n <= 1 ? 0.5 : 0.22 + (0.56 * i) / (n - 1);
+  }
+
+  function portLayoutOf(node) {
+    const spec = PORT_SPEC[node.type] || { in: 0, out: 0 };
+    const list = [];
+
+    if (node.type === 'core') {
+      // 12 个口 = 四面各 3 个，全部是输入
+      const per = Math.max(1, Math.round((spec.in || 4) / 4));
+      ['n', 'e', 's', 'w'].forEach(function (side) {
+        for (let i = 0; i < per; i++) {
+          list.push({ i: list.length, dir: 'in', side: side, t: slotT(per, i) });
+        }
+      });
+      return list;
+    }
+
+    const ins = spec.in || 0, outs = spec.out || 0;
+    for (let i = 0; i < ins; i++) {
+      list.push({ i: list.length, dir: 'in', side: 'l', t: slotT(ins, i) });
+    }
+    // 输出优先放右边，超过 2 个再往左边补（风力涡轮机就是左右各 2）
+    const right = Math.min(outs, 2), left = outs - right;
+    for (let i = 0; i < right; i++) {
+      list.push({ i: list.length, dir: 'out', side: 'r', t: slotT(right, i) });
+    }
+    for (let i = 0; i < left; i++) {
+      list.push({ i: list.length, dir: 'out', side: 'l', t: slotT(left, i) });
+    }
+    return list;
+  }
+
+  function buildPorts(node, el) {
+    node.ports = portLayoutOf(node);
+    node.portEls = [];
+    const frag = document.createDocumentFragment();
+
+    node.ports.forEach(function (p) {
+      const dot = document.createElement('div');
+      dot.className = 'port port-' + p.dir;
+      dot.dataset.i = p.i;
+      dot.dataset.dir = p.dir;
+      if (p.side === 'l' || p.side === 'w') { dot.style.left = '0%'; dot.style.top = (p.t * 100) + '%'; }
+      else if (p.side === 'r' || p.side === 'e') { dot.style.left = '100%'; dot.style.top = (p.t * 100) + '%'; }
+      else if (p.side === 'n') { dot.style.left = (p.t * 100) + '%'; dot.style.top = '0%'; }
+      else { dot.style.left = (p.t * 100) + '%'; dot.style.top = '100%'; }
+      dot.title = (p.dir === 'in' ? '输入接口 ' : '输出接口 ') +
+        (node.ports.filter(function (q) { return q.dir === p.dir && q.i < p.i; }).length + 1) +
+        ' / ' + node.ports.filter(function (q) { return q.dir === p.dir; }).length +
+        (p.dir === 'in' ? '（点击断开）' : '（拖出线路）');
+      frag.appendChild(dot);
+      node.portEls[p.i] = dot;
+    });
+    el.appendChild(frag);
+
+    // 输出接口：从这里拖出轨道 / 管道 / 电缆
+    node.portEls.forEach(function (dot) {
+      if (dot.dataset.dir !== 'out') return;
+      dot.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        beginWire(node, e.clientX, e.clientY, +dot.dataset.i);
+      });
+      dot.addEventListener('touchstart', function (e) {
+        e.stopPropagation();
+        const pt = pointOf(e);
+        beginWire(node, pt.x, pt.y, +dot.dataset.i);
+      }, { passive: true });
+    });
+
+    // 输入接口：点一下断开接在这里的那条线
+    node.portEls.forEach(function (dot) {
+      if (dot.dataset.dir !== 'in') return;
+      dot.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      dot.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+      dot.addEventListener('click', function (e) {
+        e.stopPropagation();
+        disconnectInto(node, +dot.dataset.i);
+      });
+    });
+  }
+
+  function placeNode(type, cx, cy, quiet) {
+    if (LOGI[type] || type === 'core') return null;          // 物流件不是设备，走接线流程
+    if (!isSandbox() && (state.stock[type] || 0) <= 0) {
+      if (!quiet) toast('该设备库存不足，先点「补给 +」');
+      return null;
+    }
+
+    const w = screenToWorld(cx, cy);
+    const x = Math.round((w.x - NODE_W / 2) / 8) * 8;
+    const y = Math.round((w.y - NODE_H / 2) / 8) * 8;
+
+    // 别把设备怼到工厂核心身上（会被完全遮住）
+    const core = state.nodes.find(function (n) { return n.type === 'core'; });
+    if (core) {
+      const nx = x + NODE_W / 2, ny = y + NODE_H / 2;
+      if (nx > core.x && nx < core.x + core.w && ny > core.y && ny < core.y + core.h) {
+        if (!quiet) toast('这里是工厂核心，设备请放在它周围');
+        return null;
+      }
+    }
+
+    const node = {
+      id: 'n' + (state.seq++), type: type, x: x, y: y,
+      progress: 0, working: false, inBuf: [], outBuf: []
+    };
+    state.nodes.push(node);
+    mountNode(node);
+
+    if (!isSandbox()) state.stock[type] -= 1;
+
+    updateAll();
+    selectNode(node.id);
+
+    // 第一次摆采矿机时点一下：它不是直接产资源，得靠轨道送回核心
+    if (type === 'miner' && !state.links.some(function (l) { return l.from === node.id; })) {
+      setTimeout(function () { toast('采矿机产出的矿石要走轨道送回工厂核心才算入库'); }, 400);
+    }
+    return node;
+  }
+
+  function placeAtCenter(type) {
+    if (LOGI[type] || type === 'core') return;
+    if (!isSandbox() && (state.stock[type] || 0) <= 0) { toast('该设备库存不足，先点「补给 +」'); return; }
+    const r = viewport.getBoundingClientRect();
+    const n = state.nodes.length;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+
+    // 依次尝试几个落点：正中间往往被工厂核心占着
+    const tries = [
+      [((n % 3) - 1) * 150, (Math.floor(n / 3) % 3 - 1) * 96],
+      [280, -280], [-280, 280], [280, 280], [-280, -280]
+    ];
+    for (let i = 0; i < tries.length; i++) {
+      if (placeNode(type, cx + tries[i][0], cy + tries[i][1], i < tries.length - 1)) return;
+    }
+    toast('周围没找到空位，请直接拖到画布上放置');
+  }
+
+  function selectNode(id) {
+    state.selected = id;
+    Array.prototype.forEach.call(world.querySelectorAll('.node'), function (el) {
+      el.classList.toggle('selected', el.dataset.id === id);
+    });
+  }
+
+  function removeNode(id) {
+    const i = state.nodes.findIndex(function (n) { return n.id === id; });
+    if (i < 0) return;
+    const node = state.nodes[i];
+    if (node.type === 'core') { toast('工厂核心不可拆除'); return; }
+    if (node.el) node.el.remove();
+    state.nodes.splice(i, 1);
+    dropLinksOf(id);
+    if (state.selected === id) state.selected = null;
+    updateAll();
+    toast('设备已拆除');
+  }
+
+  // 节点状态展示（采矿机用）
+  function setNodeState(node, text, progress, working) {
+    if (!node.el) return;
+    if (node.stText && node.stText.textContent !== text) node.stText.textContent = text;
+    if (node.barEl) node.barEl.style.width = Math.round(clamp(progress, 0, 1) * 100) + '%';
+    node.el.classList.toggle('active', !!working);
+  }
+
+  /* ==========================================================
+     九·B 物流系统：端口 / 传输轨道 / 管道 / 工厂核心
+     ========================================================== */
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function svgEl(tag, attrs) {
+    const e = document.createElementNS(SVG_NS, tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    return e;
+  }
+
+  function nodeById(id) {
+    for (let i = 0; i < state.nodes.length; i++) if (state.nodes[i].id === id) return state.nodes[i];
+    return null;
+  }
+
+  // 工厂核心：永远摆在地图正中，不可拖动 / 拆除
+  function createCore() {
+    const node = {
+      id: 'core', type: 'core', x: -CORE_SIZE / 2, y: -CORE_SIZE / 2,
+      progress: 0, working: true, received: 0, inBuf: [], outBuf: []
+    };
+    state.nodes.push(node);
+    mountNode(node);
+    return node;
+  }
+
+  /* ---- 接口坐标：世界坐标系，随相机缩放自动跟随 ---- */
+  function portPos(node, idx) {
+    const list = node.ports || [];
+    const p = list[idx] || list[0];
+    const w = node.w || NODE_W, h = node.h || NODE_H;
+    if (!p) return { x: node.x + w, y: node.y + h / 2, nx: 1, ny: 0 };
+    if (p.side === 'l' || p.side === 'w') return { x: node.x, y: node.y + h * p.t, nx: -1, ny: 0 };
+    if (p.side === 'r' || p.side === 'e') return { x: node.x + w, y: node.y + h * p.t, nx: 1, ny: 0 };
+    if (p.side === 'n') return { x: node.x + w * p.t, y: node.y, nx: 0, ny: -1 };
+    return { x: node.x + w * p.t, y: node.y + h, nx: 0, ny: 1 };
+  }
+
+  // 这个接口是不是已经被某条线占了
+  function portBusy(nodeId, idx) {
+    return state.links.some(function (l) {
+      return (l.from === nodeId && l.fp === idx) || (l.to === nodeId && l.tp === idx);
+    });
+  }
+
+  // 找一个空闲接口：优先离对端最近的那个，走线不会交叉得太难看
+  function freePort(node, dir, near) {
+    const list = node.ports || [];
+    let best = -1, bd = Infinity;
+    list.forEach(function (p) {
+      if (p.dir !== dir) return;
+      if (portBusy(node.id, p.i)) return;
+      const pos = portPos(node, p.i);
+      const d = near ? Math.hypot(pos.x - near.x, pos.y - near.y) : p.i;
+      if (d < bd) { bd = d; best = p.i; }
+    });
+    return best;
+  }
+
+  // 接口颜色跟着「道」走
+  function refreshPorts(node) {
+    if (!node.portEls) return;
+    node.portEls.forEach(function (d) {
+      d.removeAttribute('data-lane');
+      d.classList.remove('busy');
+    });
+    state.links.forEach(function (l) {
+      if (l.from === node.id && node.portEls[l.fp]) {
+        node.portEls[l.fp].dataset.lane = l.kind;
+        node.portEls[l.fp].classList.add('busy');
+      }
+      if (l.to === node.id && node.portEls[l.tp]) {
+        node.portEls[l.tp].dataset.lane = l.kind;
+        node.portEls[l.tp].classList.add('busy');
+      }
+    });
+  }
+
+  function refreshAllPorts() {
+    state.nodes.forEach(refreshPorts);
+  }
+
+  /* ---- 电网：沿电缆做一次连通，从发电设备能走到的都算有电 ---- */
+  function computePower() {
+    const adj = {};
+    state.links.forEach(function (l) {
+      if (l.kind !== 'cable') return;
+      (adj[l.from] || (adj[l.from] = [])).push(l.to);
+      (adj[l.to] || (adj[l.to] = [])).push(l.from);
+    });
+    const seen = {}, queue = [];
+    state.nodes.forEach(function (n) {
+      if ((DEFS[n.type].power || 0) > 0) { seen[n.id] = true; queue.push(n.id); }
+    });
+    while (queue.length) {
+      const id = queue.shift();
+      (adj[id] || []).forEach(function (to) {
+        if (seen[to]) return;
+        seen[to] = true;
+        queue.push(to);
+      });
+    }
+    state.nodes.forEach(function (n) {
+      n.powered = !!seen[n.id];
+      // 还没研究「电力基础」时不该有电的烦恼，只有解锁后才要求接电缆
+      const gated = !!state.unlocked.power;
+      if (n.el) n.el.classList.toggle('unpowered', gated && (DEFS[n.type].power || 0) < 0 && !n.powered);
+    });
+  }
+
+  // 缺电时设备降速运行（不是完全停摆，避免新手一头雾水）
+  const NO_POWER_SPEED = 0.4;
+
+
+  function bezAt(a, b, c, e, t) {
+    const u = 1 - t;
+    return {
+      x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * e.x,
+      y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * e.y
+    };
+  }
+
+  function makeGeo(from, to) {
+    // 两端各沿各自端口的朝外法线伸出控制点 —— 无论从哪条边进出都不会打结
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const k = clamp(dist * 0.42, 36, 220);
+    const c1 = { x: from.x + from.nx * k, y: from.y + from.ny * k };
+    const c2 = { x: to.x + to.nx * k, y: to.y + to.ny * k };
+    let len = 0, px = from.x, py = from.y;
+    for (let i = 1; i <= 12; i++) {
+      const p = bezAt(from, c1, c2, to, i / 12);
+      len += Math.hypot(p.x - px, p.y - py);
+      px = p.x; py = p.y;
+    }
+    return { p0: from, c1: c1, c2: c2, p1: to, len: Math.max(1, len) };
+  }
+
+  function pathD(g) {
+    return 'M' + g.p0.x + ' ' + g.p0.y +
+      'C' + g.c1.x + ' ' + g.c1.y + ',' + g.c2.x + ' ' + g.c2.y + ',' + g.p1.x + ' ' + g.p1.y;
+  }
+
+  function makeItemEl(link, it) {
+    const g = svgEl('g', { 'class': 'lk-item' });
+    g.appendChild(svgEl('rect', {
+      x: -3.6, y: -3.6, width: 7.2, height: 7.2, rx: 1.6,
+      fill: (RES[it.m] && RES[it.m].color) || '#9fb4c4'
+    }));
+    link.itemLayer.appendChild(g);
+    it.el = g;
+  }
+
+  function buildLinkEl(link) {
+    const g = svgEl('g', { 'class': 'lk ' + link.kind, 'data-id': link.id });
+    const base = svgEl('path', { 'class': 'lk-base' });
+    const rail = svgEl('path', { 'class': 'lk-rail' });
+    const flow = svgEl('path', { 'class': 'lk-flow' });
+    const items = svgEl('g', { 'class': 'lk-items' });
+    g.appendChild(base); g.appendChild(rail); g.appendChild(flow); g.appendChild(items);
+    linkLayer.appendChild(g);
+
+    link.g = g;
+    link.baseEl = base; link.railEl = rail; link.flowEl = flow; link.itemLayer = items;
+    link.items = link.items || [];
+    link.items.forEach(function (it) { makeItemEl(link, it); });
+  }
+
+  function layoutLinks() {
+    state.links.forEach(function (link) {
+      const a = nodeById(link.from), b = nodeById(link.to);
+      if (!a || !b || !link.g) return;
+      const from = portPos(a, link.fp);
+      const to = portPos(b, link.tp);
+      link.geo = makeGeo(from, to);
+      const d = pathD(link.geo);
+      link.baseEl.setAttribute('d', d);
+      link.railEl.setAttribute('d', d);
+      link.flowEl.setAttribute('d', d);
+    });
+  }
+
+  function dropLinksOf(nodeId) {
+    state.links = state.links.filter(function (l) {
+      if (l.from === nodeId || l.to === nodeId) {
+        if (l.g) l.g.remove();
+        return false;
+      }
+      return true;
+    });
+    refreshAllPorts();
+    computePower();
+  }
+
+  // 点输入接口：断掉接在这个接口上的那条线（不传接口就断最后一条）
+  function disconnectInto(node, portIdx) {
+    for (let i = state.links.length - 1; i >= 0; i--) {
+      const l = state.links[i];
+      if (l.to !== node.id) continue;
+      if (typeof portIdx === 'number' && l.tp !== portIdx) continue;
+      if (l.g) l.g.remove();
+      state.links.splice(i, 1);
+      refreshAllPorts();
+      computePower();
+      updateAll();
+      toast('已断开一条' + LOGI[l.kind].name);
+      return;
+    }
+    toast('这个接口上没有接线');
+  }
+
+  /* ---- 建立连线 ---- */
+  // 熔炉出的是熔液（液体）→ 管道；采矿机 / 制造台出固体 → 轨道
+  /* ---- 建立连线 ---- */
+  // 熔炉出的是熔液（液体）→ 管道；采矿机 / 制造台出固体 → 轨道；风车出电力 → 电缆
+  function cargoKind(node) {
+    return node.type === 'furnace' ? 'pipe' : 'belt';
+  }
+
+  // 返回 null 表示合法，否则是要弹给玩家看的原因
+  function validateLink(a, b, kind) {
+    const an = DEFS[a.type].name, bn = DEFS[b.type].name;
+
+    if (kind === 'cable') {
+      if ((DEFS[a.type].power || 0) <= 0) return '只有发电设备能接出电力线缆';
+      if ((DEFS[b.type].power || 0) >= 0) return bn + ' 不需要供电';
+      return null;
+    }
+
+    if (a.type === 'wind') return '风力涡轮机只输出电力，请用「电力线缆」';
+    if (a.type === 'core') return '工厂核心只收货，不向外输出';
+    if (b.type === 'wind' || b.type === 'miner') return bn + ' 不接受物料输入';
+    if (!(PORT_SPEC[b.type] || {}).in) return bn + ' 没有输入接口';
+
+    const need = cargoKind(a);
+    if (kind !== need) {
+      return an + '产出的是' +
+        (need === 'pipe' ? '熔液，必须用「管道」' : '固体，必须用「传输轨道」');
+    }
+    if (b.type === 'core' && kind === 'pipe') {
+      return '核心只收固体：熔液要先经制造台铸成锭，再用轨道送回';
+    }
+    if (b.type === 'assembler' && kind === 'belt') return '制造台只吃熔液，请用「管道」接进去';
+    if (b.type === 'furnace' && kind === 'pipe') return '熔炉只吃矿石，请用「传输轨道」接进去';
+    return null;
+  }
+
+  function createLink(fromNode, toNode, kind, fp, tp) {
+    if (!LOGI[kind]) return;
+    if (fromNode.id === toNode.id) { toast('不能连到自己'); return; }
+
+    const bad = validateLink(fromNode, toNode, kind);
+    if (bad) { toast(bad); return; }
+
+    // 接口分配：没指定就挑离对端最近的空闲口
+    if (typeof fp !== 'number' || portBusy(fromNode.id, fp)) {
+      fp = freePort(fromNode, 'out', portPos(toNode, typeof tp === 'number' ? tp : 0));
+    }
+    if (fp < 0) {
+      const outs = (PORT_SPEC[fromNode.type] || {}).out || 0;
+      toast(outs
+        ? DEFS[fromNode.type].name + ' 的 ' + outs + ' 个输出接口都占用了'
+        : DEFS[fromNode.type].name + ' 没有输出接口');
+      return;
+    }
+
+    if (typeof tp !== 'number' || portBusy(toNode.id, tp)) {
+      tp = freePort(toNode, 'in', portPos(fromNode, fp));
+    }
+    if (tp < 0) {
+      const ins = (PORT_SPEC[toNode.type] || {}).in || 0;
+      toast(ins
+        ? DEFS[toNode.type].name + ' 的 ' + ins + ' 个输入接口都占用了'
+        : DEFS[toNode.type].name + ' 没有输入接口');
+      return;
+    }
+
+    if (!isSandbox() && (state.stock[kind] || 0) <= 0) {
+      toast('没有' + LOGI[kind].name + '了：解锁科技会送，也可点「补给 +」');
+      return;
+    }
+
+    const link = {
+      id: 'l' + (state.seq++), from: fromNode.id, to: toNode.id,
+      kind: kind, fp: fp, tp: tp, items: []
+    };
+    state.links.push(link);
+    if (!isSandbox()) state.stock[kind] -= 1;
+
+    buildLinkEl(link);
+    layoutLinks();
+    refreshAllPorts();
+    computePower();
+    updateAll();
+    toast(LOGI[kind].name + '已接通' + (kind === 'cable' ? '：设备恢复满速' : ''));
+  }
+
+  /* ---- 接线手势 ---- */
+  let wireTempEl = null;
+
+  function beginWire(node, cx, cy, portIdx) {
+    const want = state.wireKind || defaultLane(node);
+    state.wireSrc = node;
+    state.wireSrcPort = typeof portIdx === 'number' ? portIdx : freePort(node, 'out');
+    drag.mode = 'wire';
+    drag.wireFrom = portPos(node, state.wireSrcPort);
+    document.body.classList.add('wiring');
+    if (!wireTempEl) {
+      wireTempEl = svgEl('path', { 'class': 'wire-temp' });
+      linkLayer.appendChild(wireTempEl);
+    }
+    wireTempEl.setAttribute('class', 'wire-temp ' + want);
+    moveWire(cx, cy);
+  }
+
+  function moveWire(cx, cy) {
+    if (!wireTempEl) return;
+    const w = screenToWorld(cx, cy);
+    const from = drag.wireFrom;
+    const k = clamp(Math.hypot(w.x - from.x, w.y - from.y) * 0.5, 34, 230);
+    const c1 = { x: from.x + from.nx * k, y: from.y + from.ny * k };
+    wireTempEl.setAttribute('d',
+      'M' + from.x + ' ' + from.y + ' C' + c1.x + ' ' + c1.y + ',' + w.x + ' ' + w.y +
+      ',' + w.x + ' ' + w.y);
+
+    const el = document.elementFromPoint(cx, cy);
+    const port = el && el.closest ? el.closest('.port-in') : null;
+    Array.prototype.forEach.call(document.querySelectorAll('.port.hot'), function (p) {
+      if (p !== port) p.classList.remove('hot');
+    });
+    if (port) port.classList.add('hot');
+  }
+
+  function endWire(cx, cy) {
+    document.body.classList.toggle('wiring', !!state.wireKind);
+    if (wireTempEl) { wireTempEl.remove(); wireTempEl = null; }
+    Array.prototype.forEach.call(document.querySelectorAll('.port.hot'), function (p) {
+      p.classList.remove('hot');
+    });
+
+    const src = state.wireSrc;
+    const srcPort = state.wireSrcPort;
+    state.wireSrc = null;
+    state.wireSrcPort = null;
+    if (!src) return;
+
+    const el = document.elementFromPoint(cx, cy);
+    if (!el || !el.closest) return;
+
+    // 落在具体接口上 → 就用这个接口；落在设备身上 → 自动挑最近的空口
+    const portEl = el.closest('.port-in');
+    const nodeEl = el.closest('.node');
+    if (!nodeEl) return;
+
+    const target = nodeById(nodeEl.dataset.id);
+    if (!target) return;
+    if (target.id === src.id) { toast('不能连到自己'); return; }
+
+    let tp = null;
+    if (portEl) tp = +portEl.dataset.i;
+
+    const kind = state.wireKind || defaultLane(src);
+
+    // 目标没有可用输入口时先提示，别再往下走
+    if (tp != null && portBusy(target.id, tp)) {
+      toast('这个接口已被占用：换一个口，或先点它断开');
+      return;
+    }
+    if (tp == null && freePort(target, 'in', portPos(src, srcPort)) < 0) {
+      toast(DEFS[target.type].name + ' 的输入接口已占满');
+      return;
+    }
+    createLink(src, target, kind, srcPort, tp);
+  }
+
+  // 没指定线种时，按设备默认输出猜一个
+  function defaultLane(node) {
+    if ((DEFS[node.type].power || 0) > 0) return 'cable';
+    return cargoKind(node);
+  }
+
+  function armWire(kind) {
+    state.wireKind = state.wireKind === kind ? null : kind;
+    document.body.classList.toggle('wiring', !!state.wireKind);
+    updateDock();
+    if (state.wireKind) {
+      toast('已选择「' + LOGI[kind].name + '」：从输出接口拖到输入接口' +
+        (kind === 'cable' ? '（风车 → 用电设备）' : ''));
+    }
+  }
+
+  /* ---- 货物收发 ---- */
+  function tryReceive(node, it) {
+    if (node.type === 'core') {
+      const v = CORE_VALUE[it.k] || 0;
+      if (!v) return false;
+      node.received = (node.received || 0) + v;
+      addRes(it.m, v);
+      updateTask();
+      floatText(node.x + node.w / 2, node.y + node.h / 2 - 20,
+        '+' + v + ' ' + RES[it.m].name, RES[it.m].color);
+      return true;
+    }
+    if (node.type === 'furnace') {
+      if (it.k !== 'ore' || !METALS[it.m] || node.inBuf.length >= 3) return false;
+      node.inBuf.push(it);
+      return true;
+    }
+    if (node.type === 'assembler') {
+      if (it.k !== 'melt' || node.inBuf.length >= 4) return false;
+      node.inBuf.push(it);
+      return true;
+    }
+    return false;
+  }
+
+  function pushToLink(link, it) {
+    if (link.items.length >= 5) return false;
+    for (let i = 0; i < link.items.length; i++) if (link.items[i].t < 0.08) return false;
+    const cargo = { k: it.k, m: it.m, t: 0 };
+    makeItemEl(link, cargo);
+    link.items.push(cargo);
+    return true;
+  }
+
+  /* ---- 每帧推进货物流转（rAF，比 200ms 的 tick 顺滑得多）---- */
+  let lastLinkFrame = performance.now();
+
+  function linkFrame() {
+    requestAnimationFrame(linkFrame);
+    const now = performance.now();
+    let dt = (now - lastLinkFrame) / 1000;
+    lastLinkFrame = now;
+    if (!state.playing || state.paused) return;
+    dt = Math.min(dt, 0.12);
+
+    // 1) 沿轨推进 / 到站交货
+    for (let li = 0; li < state.links.length; li++) {
+      const link = state.links[li];
+      if (!link.geo) continue;
+      const target = nodeById(link.to);
+      if (!target) continue;
+      const step = dt * LOGI[link.kind].speed / link.geo.len;
+
+      for (let i = link.items.length - 1; i >= 0; i--) {
+        const it = link.items[i];
+        if (it.t < 1) it.t = Math.min(1, it.t + step);
+        if (it.t >= 1 && tryReceive(target, it)) {
+          if (it.el) it.el.remove();
+          link.items.splice(i, 1);
+          continue;
+        }
+        if (it.el) {
+          const p = bezAt(link.geo.p0, link.geo.c1, link.geo.c2, link.geo.p1, it.t);
+          it.el.setAttribute('transform', 'translate(' + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ')');
+        }
+      }
+    }
+
+    // 2) 设备输出缓存 → 轨道 / 管道（多个出口时自动往最空的一条分流）
+    for (let ni = 0; ni < state.nodes.length; ni++) {
+      const n = state.nodes[ni];
+      if (!n.outBuf || !n.outBuf.length) continue;
+      const it = n.outBuf[0];
+      const need = ITEMS[it.k].solid ? 'belt' : 'pipe';
+
+      let best = null;
+      for (let li = 0; li < state.links.length; li++) {
+        const l = state.links[li];
+        if (l.from !== n.id || l.kind !== need) continue;
+        if (!best || l.items.length < best.items.length) best = l;
+      }
+      if (best && pushToLink(best, it)) n.outBuf.shift();
+    }
+  }
+
+  /* ==========================================================
+     十、拖拽状态机（鼠标 + 触摸统一）
+     ========================================================== */
+  let lastTouchAt = -1e9;
+
+  function isTouchEmulation() {
+    return performance.now() - lastTouchAt < 700;
+  }
+
+  // 按下矿脉时先判断能否徒手采；能采则进入长按，否则弹提示返回 false
+  function tryHandPress(depId, cx, cy) {
+    const dep = state.deposits.find(function (d) { return d.id === depId; });
+    if (!dep) return false;
+
+    if (dep.amount <= 0) {
+      if (performance.now() - lastHintAt > 1500) {
+        toast(RES[dep.ore].label + '已经枯竭');
+        lastHintAt = performance.now();
+      }
+      return false;
+    }
+
+    if (!canHand(dep.ore)) { handBlocked(dep.ore); return false; }
+
+    startPress(dep, cx, cy);
+    return true;
+  }
+
+  function beginPan(cx, cy) {
+    endPress();
+    drag.mode = 'pan';
+    drag.x0 = cx; drag.y0 = cy;
+    drag.cx0 = state.cam.x; drag.cy0 = state.cam.y;
+    drag.dist = 0;
+    viewport.classList.add('panning');
+  }
+
+  function beginPinch(t1, t2) {
+    const m = { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+    drag.mode = 'pinch';
+    drag.d0 = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY) || 1;
+    drag.s0 = state.cam.s;
+    drag.anchor = screenToWorld(m.x, m.y);
+  }
+
+  function movePinch(e) {
+    if (e.touches.length < 2) return;
+    const a = e.touches[0], b = e.touches[1];
+    const m = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+    const ns = clamp(drag.s0 * (d / drag.d0), MIN_S, MAX_S);
+    const r = viewport.getBoundingClientRect();
+    state.cam.s = ns;
+    state.cam.x = m.x - r.left - drag.anchor.x * ns;
+    state.cam.y = m.y - r.top - drag.anchor.y * ns;
+    renderCam();
+  }
+
+  function beginNodeDrag(node, cx, cy) {
+    drag.mode = 'node';
+    drag.node = node;
+    drag.el = node.el;
+    drag.x0 = cx; drag.y0 = cy;
+    drag.nx = node.x; drag.ny = node.y;
+    selectNode(node.id);
+    if (node.el) node.el.classList.add('dragging');
+  }
+
+  function beginCardGhost(cardEl, type, cx, cy) {
+    const ghost = cardEl.cloneNode(true);
+    ghost.classList.remove('out');
+    ghost.classList.add('drag-ghost');
+    document.body.appendChild(ghost);
+    drag.ghost = ghost;
+    drag.cardEl = cardEl;
+    drag.type = type;
+    cardEl.classList.add('dragging-src');
+    moveGhost(cx, cy);
+  }
+
+  function moveGhost(cx, cy) {
+    if (!drag.ghost) return;
+    drag.ghost.style.left = cx + 'px';
+    drag.ghost.style.top = cy + 'px';
+    viewport.classList.toggle('drop-ok', hitViewport(cx, cy));
+  }
+
+  function onMove(cx, cy, e) {
+    if (!drag.mode) return;
+
+    if (drag.mode === 'pan') {
+      // 记录本次拖动的最大位移，用于区分“拖动平移”与“点击采集”
+      drag.dist = Math.max(drag.dist, Math.abs(cx - drag.x0) + Math.abs(cy - drag.y0));
+      state.cam.x = drag.cx0 + (cx - drag.x0);
+      state.cam.y = drag.cy0 + (cy - drag.y0);
+      renderCam();
+      return;
+    }
+
+    if (drag.mode === 'node') {
+      const s = state.cam.s;
+      const nx = drag.nx + (cx - drag.x0) / s;
+      const ny = drag.ny + (cy - drag.y0) / s;
+      drag.node.x = nx;
+      drag.node.y = ny;
+      if (drag.el) drag.el.style.transform = 'translate(' + nx + 'px,' + ny + 'px)';
+      layoutLinks();                      // 轨道跟着设备一起走
+      return;
+    }
+
+    if (drag.mode === 'press') {
+      // 手指/鼠标挪动太多，说明用户其实想拖画布
+      if (Math.abs(cx - drag.x0) + Math.abs(cy - drag.y0) > 10) {
+        endPress();
+        beginPan(cx, cy);
+      }
+      return;
+    }
+
+    if (drag.mode === 'card') { moveGhost(cx, cy); return; }
+
+    if (drag.mode === 'wire') { moveWire(cx, cy); return; }
+
+    if (drag.mode === 'cardPending') {
+      const dx = cx - drag.x0, dy = cy - drag.y0;
+      if (Math.abs(dy) > 6 && Math.abs(dy) > Math.abs(dx)) {
+        beginCardGhost(drag.cardEl, drag.type, cx, cy);
+        drag.mode = 'card';
+      } else if (Math.abs(dx) > 8) {
+        drag.mode = null;
+      }
+    }
+  }
+
+  function onEnd(cx, cy) {
+    if (!drag.mode) return;
+    const mode = drag.mode;
+
+    if (mode === 'press') {
+      endPress();
+    } else if (mode === 'pan') {
+      viewport.classList.remove('panning');
+    } else if (mode === 'node') {
+      if (drag.el) drag.el.classList.remove('dragging');
+      if (drag.node) {
+        drag.node.x = Math.round(drag.node.x / 4) * 4;
+        drag.node.y = Math.round(drag.node.y / 4) * 4;
+        if (drag.el) drag.el.style.transform = 'translate(' + drag.node.x + 'px,' + drag.node.y + 'px)';
+        layoutLinks();
+      }
+    } else if (mode === 'wire') {
+      endWire(cx, cy);
+    } else if (mode === 'cardPending') {
+      placeAtCenter(drag.type);
+    } else if (mode === 'card') {
+      if (drag.ghost) drag.ghost.remove();
+      if (drag.cardEl) drag.cardEl.classList.remove('dragging-src');
+      viewport.classList.remove('drop-ok');
+      if (hitViewport(cx, cy)) placeNode(drag.type, cx, cy);
+      else toast('请把卡片放到画布区域内');
+    }
+
+    drag.mode = null;
+    drag.ghost = null;
+    drag.cardEl = null;
+    drag.node = null;
+    drag.el = null;
+    drag.wireFrom = null;
+    drag.px = drag.py = null;
+  }
+
+  /* ==========================================================
+     十一、事件绑定
+     ========================================================== */
+  function bindEvents() {
+
+    viewport.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      if (isTouchEmulation()) return;
+      if (e.target.closest('.node')) return;
+      e.preventDefault();
+
+      // 按在矿脉上：能挖就进入长按，挖不动则提示并当作空白处
+      const depEl = e.target.closest('.deposit');
+      if (depEl && tryHandPress(depEl.dataset.id, e.clientX, e.clientY)) return;
+
+      beginPan(e.clientX, e.clientY);
+    });
+
+    viewport.addEventListener('touchstart', function (e) {
+      lastTouchAt = performance.now();
+      if (e.target.closest('.node')) return;
+
+      if (e.touches.length >= 2) {
+        endPress();
+        beginPinch(e.touches[0], e.touches[1]);
+      } else if (e.touches.length === 1) {
+        const p = pointOf(e);
+        const depEl = e.target.closest('.deposit');
+        if (depEl && tryHandPress(depEl.dataset.id, p.x, p.y)) return;
+        beginPan(p.x, p.y);
+      }
+    }, { passive: true });
+
+    document.addEventListener('mousemove', function (e) {
+      if (isTouchEmulation()) return;
+      onMove(e.clientX, e.clientY, e);
+    });
+
+    document.addEventListener('touchmove', function (e) {
+      lastTouchAt = performance.now();
+      if (!drag.mode) return;
+      if (drag.mode === 'pinch') { movePinch(e); e.preventDefault(); return; }
+      if (drag.mode === 'pan' || drag.mode === 'press' || drag.mode === 'node' || drag.mode === 'card' || drag.mode === 'cardPending' || drag.mode === 'wire') {
+        const p = pointOf(e);
+        onMove(p.x, p.y, e);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    document.addEventListener('mouseup', function (e) {
+      if (isTouchEmulation()) { endPress(); return; }
+      onEnd(e.clientX, e.clientY);
+      endPress();                     // 松手一律停止（onEnd 提前返回也不会漏）
+    });
+
+    document.addEventListener('touchend', function (e) {
+      lastTouchAt = performance.now();
+      const p = pointOf(e);
+      if (drag.mode === 'pinch') {
+        if (e.touches.length < 2) drag.mode = null;
+        endPress();
+        return;
+      }
+      onEnd(p.x, p.y);
+      endPress();                     // 手指抬起一律停止
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', function () {
+      endPress();                     // 触摸被系统打断：立刻停止采集
+      if (drag.ghost) drag.ghost.remove();
+      if (drag.cardEl) drag.cardEl.classList.remove('dragging-src');
+      if (wireTempEl) { wireTempEl.remove(); wireTempEl = null; }
+      document.body.classList.toggle('wiring', !!state.wireKind);
+      state.wireSrc = null;
+      state.wireSrcPort = null;
+      viewport.classList.remove('panning', 'drop-ok');
+      drag.mode = null; drag.ghost = null;
+    });
+
+    viewport.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016));
+      zoomAt(e.clientX, e.clientY, factor);
+    }, { passive: false });
+
+    viewport.addEventListener('dblclick', function (e) {
+      if (e.target.closest('.node')) return;
+      resetView();
+    });
+
+    // ---- 建造栏拖拽 ----
+    dockScroll.addEventListener('mousedown', function (e) {
+      const card = e.target.closest('.dock-card');
+      if (!card || isTouchEmulation()) return;
+      e.preventDefault();
+      const type = card.dataset.type;
+      if (LOGI[type]) { armWire(type); return; }       // 物流件：点一下进入接线模式
+      if ((state.stock[type] || 0) <= 0) { toast('库存不足，先点「补给 +」'); return; }
+      drag.mode = 'card';
+      drag.type = type;
+      drag.cardEl = card;
+      beginCardGhost(card, type, e.clientX, e.clientY);
+    });
+
+    dockScroll.addEventListener('touchstart', function (e) {
+      lastTouchAt = performance.now();
+      const card = e.target.closest('.dock-card');
+      if (!card) return;
+      if (e.touches.length > 1) return;
+      const type = card.dataset.type;
+      if (LOGI[type]) { armWire(type); return; }
+      if ((state.stock[type] || 0) <= 0) { toast('库存不足，先点「补给 +」'); return; }
+      const p = pointOf(e);
+      drag.mode = 'cardPending';
+      drag.type = type;
+      drag.cardEl = card;
+      drag.x0 = p.x; drag.y0 = p.y;
+    }, { passive: true });
+
+    // ---- 缩放按钮 ----
+    $('zIn').addEventListener('click', function () {
+      const r = viewport.getBoundingClientRect();
+      zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2);
+    });
+    $('zOut').addEventListener('click', function () {
+      const r = viewport.getBoundingClientRect();
+      zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1 / 1.2);
+    });
+    $('zFit').addEventListener('click', resetView);
+
+    // ---- 选中 ----
+    viewport.addEventListener('click', function (e) {
+      if (e.target.closest('.node') || e.target.closest('.deposit')) return;
+      selectNode(null);
+    });
+
+    window.addEventListener('keydown', function (e) {
+      if (!state.playing || state.paused) return;     // 菜单/暂停时不吃游戏快捷键
+      if (e.key === 'Escape' && state.techOpen) { openTech(false); return; }
+      if (!state.selected) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        removeNode(state.selected);
+      }
+    });
+
+    // ---- 科技树开关 ----
+    $('btnTech').addEventListener('click', function () { openTech(true); });
+    $('btnTech2').addEventListener('click', function () { openTech(true); });
+    $('techClose').addEventListener('click', function () { openTech(false); });
+    techModal.addEventListener('click', function (e) {
+      if (e.target === techModal) openTech(false);
+    });
+    techCanvas.addEventListener('click', function (e) {
+      const el = e.target.closest('.tech-node');
+      if (!el) return;
+      unlockTech(el.dataset.id);
+    });
+
+    // ---- 补给 / 清空 ----
+    $('btnSupply').addEventListener('click', function () {
+      const keys = Object.keys(state.stock);
+      if (!keys.length) { toast('先去科技树解锁设备'); return; }
+      keys.forEach(function (k) {
+        const isLogi = !!LOGI[k];
+        const cap = isLogi ? 99 : 9;
+        state.stock[k] = Math.min(cap, (state.stock[k] || 0) + (isLogi ? 6 : 2));
+      });
+      updateDock();
+      toast('已补充设备与物流库存');
+    });
+
+    $('btnClear').addEventListener('click', function () {
+      const devs = state.nodes.filter(function (n) { return n.type !== 'core'; });
+      if (!devs.length) { toast('画布上还没有设备'); return; }
+      devs.forEach(function (n) { if (n.el) n.el.remove(); });
+      state.nodes = state.nodes.filter(function (n) { return n.type === 'core'; });
+      state.links.forEach(function (l) { if (l.g) l.g.remove(); });
+      state.links = [];
+      state.selected = null;
+      refreshAllPorts();
+      computePower();
+      updateAll();
+      toast('已清空设备（工厂核心保留）');
+    });
+
+    // ---- 移动端抽屉 ----
+    $('btnLeft').addEventListener('click', function () {
+      document.body.classList.toggle('drawer-left');
+      document.body.classList.remove('drawer-right');
+    });
+    $('btnRight').addEventListener('click', function () {
+      document.body.classList.toggle('drawer-right');
+      document.body.classList.remove('drawer-left');
+    });
+    $('backdrop').addEventListener('click', function () {
+      document.body.classList.remove('drawer-left', 'drawer-right');
+    });
+
+    viewport.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    window.addEventListener('resize', renderCam);
+
+    // 手指/鼠标离开页面、窗口失焦、切到后台 —— 松手事件收不到，直接停
+    window.addEventListener('blur', endPress);
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) endPress();
+    });
+    document.addEventListener('mouseout', function (e) {
+      if (!e.relatedTarget) endPress();
+    });
+  }
+
+  /* ==========================================================
+     十二、界面刷新
+     ========================================================== */
+  function renderRes() {
+    resList.innerHTML = Object.keys(RES).map(function (k) {
+      return '<div class="res">' +
+        '<span class="res-ico" style="--c:' + RES[k].color + '"></span>' +
+        '<span class="res-name">' + RES[k].name + '</span>' +
+        '<span class="res-val" id="res-' + k + '">' + state.res[k] + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function updateRes() {
+    const sb = isSandbox();
+    Object.keys(RES).forEach(function (k) {
+      const el = $('res-' + k);
+      if (el) {
+        el.textContent = sb ? '∞' : state.res[k];
+        el.classList.toggle('inf', sb);
+      }
+    });
+  }
+
+  function updateRate() {
+    const now = performance.now();
+    const cut = now - 60000;
+    while (state.gatherLog.length && state.gatherLog[0] < cut) state.gatherLog.shift();
+
+    const rate = state.gatherLog.length;
+    const txt = rate === 0 ? '0.0' : (rate < 10 ? rate.toFixed(1) : String(Math.round(rate)));
+    $('sRate').textContent = txt;
+    $('rRate').textContent = txt + ' /min';
+  }
+
+  function updateStats() {
+    let supply = 0, load = 0, consumers = 0, powered = 0;
+    state.nodes.forEach(function (n) {
+      const p = DEFS[n.type].power || 0;
+      if (p > 0) { supply += p; return; }
+      if (p < 0) { load += -p; consumers++; if (n.powered) powered++; }
+    });
+
+    // 「供电效率」= 真的用电缆接上电的设备占比（还没研究电力基础时按满额算）
+    const gated = !!state.unlocked.power;
+    const eff = (!gated || consumers === 0) ? 100 : clamp(Math.round((powered / consumers) * 100), 0, 100);
+
+    $('sLoad').textContent = load;
+    $('sSupply').textContent = supply;
+
+    const noPower = gated && consumers > 0 && supply === 0;
+    const cls = noPower ? 'warn' : (eff >= 100 ? 'ok' : (eff >= 60 ? 'warn' : 'bad'));
+    const txt = noPower ? '无电力' : eff + '%';
+    const sEff = $('sEff'); sEff.textContent = txt; sEff.className = cls;
+    const rEff = $('rEff'); rEff.textContent = txt; rEff.className = cls;
+
+    $('rLoad').textContent = load + ' kW';
+    $('rTech').textContent = Object.keys(state.unlocked).length + ' / ' + TECHS.length;
+    // 工厂核心不计入“设备台数”
+    const devCount = state.nodes.filter(function (n) { return n.type !== 'core'; }).length;
+    $('rNodes').textContent = devCount;
+    $('rDev').textContent = devCount;
+    $('rLinks').textContent = state.links.length;
+    $('rTotal').textContent = state.totalGathered;
+
+    const mt = $('modeTag');
+    if (mt) {
+      mt.textContent = isSandbox() ? '沙盒' : '生存';
+      mt.className = 'p-tag' + (isSandbox() ? ' sandbox' : '');
+    }
+
+  }
+
+  function updateTask() {
+    const has = function (t) {
+      return state.nodes.some(function (n) { return n.type === t; });
+    };
+    // “自动出矿”现在要求真的送到核心：只有产出不行，得铺轨道运过去
+    const delivered = state.nodes.some(function (n) {
+      return n.type === 'core' && (n.received || 0) > 0;
+    });
+
+    const map = {
+      click: state.clicks >= 10,
+      tool: !!state.unlocked.tool,
+      miner: has('miner'),
+      auto: delivered,
+      power: state.nodes.some(function (n) {
+        return n.powered && (DEFS[n.type].power || 0) < 0;
+      })
+    };
+
+    let done = 0, total = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('#taskList li'), function (li) {
+      const ok = !!map[li.dataset.k];
+      li.classList.toggle('done', ok);
+      if (ok) done++;
+      total++;
+    });
+    $('taskTag').textContent = done + ' / ' + total;
+  }
+
+  // 右下角半透明种子牌（点击可复制）
+  function updateSeedBadge() {
+    const el = $('seedBadge');
+    if (!el) return;
+    clearTimeout(el._copyTimer);
+    el.classList.remove('copied');
+    el.textContent = 'SEED ' + state.seedNum;
+  }
+
+  function updateAll() {
+    updateRes();
+    updateStats();
+    updateDock();
+    updateTask();
+    updateRate();
+    refreshTechTree();
+  }
+
+  /* ==========================================================
+     十三、主循环：采矿机自动采集
+     ========================================================== */
+  let lastTick = performance.now();
+
+  function gameTick() {
+    if (!state.playing || state.paused) return;
+    const now = performance.now();
+    const dt = Math.min((now - lastTick) / 1000, 0.6);
+    lastTick = now;
+
+    computePower();   // 电缆拓扑每 tick 重算一次，拔线立刻掉电
+
+    state.nodes.forEach(function (n) {
+      /* ---- 工厂核心：只收货，不生产 ---- */
+      if (n.type === 'core') {
+        setNodeState(n, '已接收 ' + (n.received || 0) + ' 单位', 0, true);
+        return;
+      }
+
+      /* ---- 风力涡轮机 ---- */
+      if (n.type === 'wind') {
+        const wires = state.links.filter(function (l) { return l.kind === 'cable' && l.from === n.id; }).length;
+        setNodeState(n, '发电 ' + DEFS.wind.power + ' kW · 线路 ' + wires, 0, true);
+        return;
+      }
+
+      // 耗电设备：解锁「电力基础」之后，没接电缆就限电运行
+      const gated = !!state.unlocked.power;
+      const pf = (!gated || n.powered) ? 1 : NO_POWER_SPEED;
+      const lim = (gated && !n.powered) ? '限电 · ' : '';
+
+      /* ---- 采矿机：产出矿石，必须靠轨道送走才算数 ---- */
+      if (n.type === 'miner') {
+        const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+        const dep = depositAt(cx, cy);
+
+        if (!dep) { setNodeState(n, '未覆盖矿脉', 0, false); n.working = false; return; }
+        if (dep.amount <= 0 && !isSandbox()) {
+          setNodeState(n, '矿脉枯竭', 0, false); n.working = false; return;
+        }
+        if (n.outBuf.length >= BUF_OUT) {
+          n.working = false;
+          setNodeState(n, lim + '输出堵塞', 0, false);
+          n.cntEl.textContent = '待运 ' + n.outBuf.length;
+          return;
+        }
+
+        const hasOut = state.links.some(function (l) {
+          return l.from === n.id && l.kind === 'belt';
+        });
+
+        // 基础 0.5 /秒（2 秒 1 单位），受科技倍率与供电影响
+        n.progress += dt * 0.5 * state.mineSpeed * pf;
+
+        if (n.progress >= 1) {
+          n.progress -= 1;
+          if (!isSandbox()) {
+            dep.amount -= 1;
+            dep.labelEl.textContent = dep.amount;
+            if (dep.amount <= 0) dep.el.classList.add('depleted');
+          }
+          n.outBuf.push({ k: 'ore', m: dep.ore });
+          updateTask();
+        }
+
+        n.working = true;
+        setNodeState(n, hasOut ? (lim + '开采 · ' + RES[dep.ore].name) : '未接轨道', n.progress, hasOut);
+        n.cntEl.textContent = n.outBuf.length
+          ? '待运 ' + n.outBuf.length
+          : (hasOut ? dep.amount + ' 剩余' : '产出待运');
+        return;
+      }
+
+      /* ---- 电弧熔炉：矿石 → 熔液（1.4s/件），熔液走管道 ---- */
+      if (n.type === 'furnace') {
+        if (n.outBuf.length >= 4) {
+          setNodeState(n, lim + '输出堵塞', 0, false);
+          n.cntEl.textContent = '熔液 ' + n.outBuf.length;
+          return;
+        }
+        if (!n.craft) {
+          const i = n.inBuf.findIndex(function (it) { return it.k === 'ore' && METALS[it.m]; });
+          if (i < 0) {
+            setNodeState(n, lim + '等待矿石', 0, false);
+            n.cntEl.textContent = '料仓 ' + n.inBuf.length;
+            return;
+          }
+          n.craft = n.inBuf.splice(i, 1)[0].m;
+          n.progress = 0;
+        }
+        n.progress += dt / SMELT_T * pf;
+        if (n.progress >= 1) {
+          n.progress = 0;
+          n.outBuf.push({ k: 'melt', m: n.craft });
+          n.craft = null;
+          setNodeState(n, '出料', 0, true);
+        } else {
+          setNodeState(n, lim + '熔炼 · ' + RES[n.craft].name, n.progress, true);
+        }
+        n.cntEl.textContent = '熔液 ' + n.outBuf.length;
+        return;
+      }
+
+      /* ---- 制造台：2 熔液 → 1 金属锭（2s/件），锭走轨道 ---- */
+      if (n.type === 'assembler') {
+        if (n.outBuf.length >= 4) {
+          setNodeState(n, lim + '输出堵塞', 0, false);
+          n.cntEl.textContent = '金属锭 ' + n.outBuf.length;
+          return;
+        }
+        if (!n.craft) {
+          const cnt = {};
+          n.inBuf.forEach(function (it) { if (it.k === 'melt') cnt[it.m] = (cnt[it.m] || 0) + 1; });
+          const metal = Object.keys(cnt).filter(function (m) { return cnt[m] >= 2; })[0];
+          if (!metal) {
+            setNodeState(n, lim + '等待熔液 ×2', 0, false);
+            n.cntEl.textContent = '料仓 ' + n.inBuf.length;
+            return;
+          }
+          let need = 2;
+          n.inBuf = n.inBuf.filter(function (it) {
+            if (need > 0 && it.k === 'melt' && it.m === metal) { need--; return false; }
+            return true;
+          });
+          n.craft = metal;
+          n.progress = 0;
+        }
+        n.progress += dt / CAST_T * pf;
+        if (n.progress >= 1) {
+          n.progress = 0;
+          n.outBuf.push({ k: 'ingot', m: n.craft });
+          n.craft = null;
+          setNodeState(n, '出料', 0, true);
+        } else {
+          setNodeState(n, lim + '铸造 · ' + RES[n.craft].name, n.progress, true);
+        }
+        n.cntEl.textContent = '金属锭 ' + n.outBuf.length;
+        return;
+      }
+
+      setNodeState(n, '待机', 0, false);
+    });
+
+    updateRate();
+  }
+
+  /* ==========================================================
+     十四、时钟
+     ========================================================== */
+  function tickClock() {
+    if (!state.playing || state.paused) return;
+    const sec = Math.floor(state.baseTime + (Date.now() - state.startAt) / 1000);
+    const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+    const ss = String(sec % 60).padStart(2, '0');
+    $('sTime').textContent = mm + ':' + ss;
+  }
+
+  /* ==========================================================
+     十五、存档 / 设置 / 界面切换
+     ========================================================== */
+  const LS_SAVES = 'cardfactory.saves.v1';
+  const LS_SET   = 'cardfactory.settings.v1';
+  const SAVE_PRE = 'cardfactory.save.';
+
+  const SCREENS = { menu: 'screenMenu', continue: 'screenContinue', newGame: 'screenNew', settings: 'screenSettings', pause: 'screenPause' };
+
+  function readJSON(key, def) {
+    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : def; }
+    catch (e) { return def; }
+  }
+  function writeJSON(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+    catch (e) { return false; }
+  }
+  function esc(str) {
+    return String(str).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+  function uid() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function fmtTime(ts) {
+    const d = new Date(ts), now = new Date();
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    const hm = p(d.getHours()) + ':' + p(d.getMinutes());
+    if (d.toDateString() === now.toDateString()) return '今天 ' + hm;
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
+  }
+
+  let saves = readJSON(LS_SAVES, []);            // 存档索引（元信息）
+  let settings = Object.assign({ grid: true, motion: true, autosave: true }, readJSON(LS_SET, {}));
+  let settingsFrom = 'menu';                     // 设置从哪进来的
+  let delArmed = null;                           // 待二次确认删除的存档 id
+  let wipeArmed = false;
+
+  /* ---------- 15.1 界面切换 ---------- */
+  function showScreen(name) {
+    Object.keys(SCREENS).forEach(function (k) {
+      $(SCREENS[k]).classList.toggle('on', k === name);
+    });
+
+    // 有全屏界面时，游戏循环暂停
+    if (name && !state.paused) {
+      if (state.playing) state.baseTime += (Date.now() - state.startAt) / 1000;
+      state.paused = true;
+    } else if (!name && state.paused) {
+      state.startAt = Date.now();
+      state.paused = false;
+    }
+
+    if (name) {
+      endPress();
+      if (state.techOpen) openTech(false);
+      document.body.classList.remove('drawer-left', 'drawer-right');
+    }
+  }
+
+  /* ---------- 15.2 世界重置 ---------- */
+  function resetWorld() {
+    endPress();
+    state.selected = null;
+    state.nodes.forEach(function (n) { if (n.el) n.el.remove(); });
+    state.nodes = [];
+    state.links = [];
+    state.seq = 1;
+
+    // 连线层整体清空（含接线预览）
+    linkLayer.innerHTML = '';
+    wireTempEl = null;
+    state.wireKind = null;
+    state.wireSrc = null;
+    state.wireSrcPort = null;
+    document.body.classList.remove('wiring');
+
+    state.deposits.forEach(function (d) {
+      d.amount = d.max;
+      d.el.classList.remove('depleted', 'charging');
+      d.labelEl.textContent = d.amount;
+      setRing(d, 0);
+    });
+
+    state.res = { iron: 0, copper: 0, silver: 0, coal: 0, wood: 0, stone: 0 };
+    state.stock = {};
+    state.unlocked = {};
+    state.gatherBoost = 0;
+    state.mineSpeed = 1;
+    state.toolLevel = 0;
+    state.clicks = 0;
+    state.totalGathered = 0;
+    state.gatherLog = [];
+    state.playTime = 0;
+    state.baseTime = 0;
+    state.startAt = Date.now();
+
+    renderDock();
+    updateAll();
+  }
+
+  /* ---------- 15.3 存档：读 / 写 ---------- */
+  // 货物在存档里压成 "k:m" 字符串（ore:iron），比对象省一半体积
+  function packItem(it) { return it.k + ':' + it.m; }
+  function unpackItem(str) {
+    if (typeof str !== 'string') return null;
+    const p = str.split(':');
+    if (!ITEMS[p[0]] || !RES[p[1]]) return null;
+    return { k: p[0], m: p[1] };
+  }
+  function unpackBuf(arr) {
+    return (arr || []).map(unpackItem).filter(Boolean);
+  }
+
+  function saveGame(quiet) {
+    if (!state.playing || !state.saveId) return false;
+
+    state.playTime = Math.floor(state.baseTime + (Date.now() - state.startAt) / 1000);
+
+    const data = {
+      id: state.saveId,
+      name: state.saveName,
+      mode: state.mode,
+      seed: state.seedNum,
+      createdAt: state.saveCreatedAt || Date.now(),
+      updatedAt: Date.now(),
+      playTime: state.playTime,
+      cam: { x: state.cam.x, y: state.cam.y, s: state.cam.s },
+      res: Object.assign({}, state.res),
+      deposits: state.deposits.map(function (d) { return d.amount; }),
+      nodes: state.nodes.filter(function (n) { return n.type !== 'core'; }).map(function (n) {
+        return {
+          id: n.id, type: n.type, x: n.x, y: n.y,
+          ib: (n.inBuf || []).map(packItem),
+          ob: (n.outBuf || []).map(packItem)
+        };
+      }),
+      links: state.links.map(function (l) {
+        return { id: l.id, from: l.from, to: l.to, kind: l.kind, fp: l.fp, tp: l.tp };
+      }),
+      stock: Object.assign({}, state.stock),
+      unlocked: Object.assign({}, state.unlocked),
+      gatherBoost: state.gatherBoost,
+      mineSpeed: state.mineSpeed,
+      toolLevel: state.toolLevel,
+      clicks: state.clicks,
+      totalGathered: state.totalGathered,
+      coreIn: (function () {
+        const c = state.nodes.find(function (n) { return n.type === 'core'; });
+        return c ? (c.received || 0) : 0;
+      })(),
+      seq: state.seq
+    };
+
+    const stored = writeJSON(SAVE_PRE + state.saveId, data);
+
+    // 更新索引（即使持久化失败，也先更新内存，保证本次会话里菜单能看到）
+    const meta = {
+      id: data.id, name: data.name, mode: data.mode, seed: data.seed,
+      createdAt: data.createdAt, updatedAt: data.updatedAt,
+      tech: Object.keys(data.unlocked).length,
+      devices: data.nodes.length
+    };
+    const i = saves.findIndex(function (s) { return s.id === data.id; });
+    if (i >= 0) saves[i] = meta; else saves.push(meta);
+    writeJSON(LS_SAVES, saves);
+
+    if (!stored) {
+      if (!quiet) toast('存档失败：浏览器本地存储不可用');
+      return false;
+    }
+    if (!quiet) toast('进度已保存');
+    return true;
+  }
+
+  function hydrate(s) {
+    if (s.res) state.res = Object.assign(state.res, s.res);
+    state.stock = Object.assign({}, s.stock || {});
+    state.unlocked = Object.assign({}, s.unlocked || {});
+    state.gatherBoost = s.gatherBoost || 0;
+    state.mineSpeed = s.mineSpeed || 1;
+    state.toolLevel = s.toolLevel || 0;
+    state.clicks = s.clicks || 0;
+    state.totalGathered = s.totalGathered || 0;
+    state.seq = s.seq || 1;
+    state.playTime = s.playTime || 0;
+    state.baseTime = state.playTime;
+    state.startAt = Date.now();
+
+    // 矿脉储量
+    (s.deposits || []).forEach(function (amt, i) {
+      const d = state.deposits[i];
+      if (!d) return;
+      d.amount = amt;
+      d.labelEl.textContent = amt;
+      d.el.classList.toggle('depleted', amt <= 0 && !isSandbox());
+    });
+
+    // 设备节点（工厂核心是固定的，不进存档）
+    (s.nodes || []).forEach(function (n) {
+      if (!DEFS[n.type] || n.type === 'core') return;
+      const node = {
+        id: n.id, type: n.type, x: n.x, y: n.y,
+        progress: 0, working: false,
+        inBuf: unpackBuf(n.ib), outBuf: unpackBuf(n.ob)
+      };
+      state.nodes.push(node);
+      mountNode(node);
+    });
+
+    // 物流线路：两端设备都在才还原
+    state.links = [];
+    (s.links || []).forEach(function (l) {
+      if (!LOGI[l.kind] || !nodeById(l.from) || !nodeById(l.to)) return;
+      const a = nodeById(l.from), b = nodeById(l.to);
+
+      // 接口槽位：老存档没存 fp/tp，按「最近的空口」补一个
+      let fp = l.fp, tp = l.tp;
+      if (typeof fp !== 'number' || portBusy(a.id, fp) || !a.ports || !a.ports[fp]) {
+        fp = freePort(a, 'out');
+      }
+      if (fp < 0) return;
+      if (typeof tp !== 'number' || portBusy(b.id, tp) || !b.ports || !b.ports[tp]) {
+        tp = freePort(b, 'in', portPos(a, fp));
+      }
+      if (tp < 0) return;
+
+      const link = {
+        id: l.id || ('l' + (state.seq++)),
+        from: l.from, to: l.to, kind: l.kind,
+        fp: fp, tp: tp, items: []
+      };
+      state.links.push(link);
+      buildLinkEl(link);
+    });
+    layoutLinks();
+    refreshAllPorts();
+    computePower();
+
+    // 核心累计收货量（任务“自动出矿”靠它判定）
+    const core = state.nodes.find(function (n) { return n.type === 'core'; });
+    if (core) core.received = s.coreIn || 0;
+
+    renderDock();
+  }
+
+  function startGame(save, fresh) {
+    // 先把模式与种子定下来：resetWorld / mountWorld 内部都要用
+    state.mode = save.mode || 'survival';
+    state.saveId = save.id;
+    state.saveName = save.name;
+    state.saveCreatedAt = save.createdAt || Date.now();
+    state.seedNum = (typeof save.seed === 'number' && isFinite(save.seed))
+      ? (save.seed >>> 0)
+      : randomSeed();          // 老存档没有种子，随机开一张新图
+
+    mountWorld(state.seedNum); // 按种子生成矿脉并挂载
+    resetWorld();              // 清空节点 / 资源 / 科技
+    createCore();              // 地图正中的工厂核心，每局必建
+
+    if (!fresh) hydrate(save);
+
+    // 老存档兼容：电力科技研究过但还没有电缆卡 → 补发（新增的第三种道）
+    if (state.unlocked.power && !state.stock.cable) {
+      state.stock.cable = UNLOCK_STOCK;
+      renderDock();       // hydrate 里已渲染过一次，补发的卡要重新排一次
+    }
+
+    // 沙盒：科技默认全解锁（读档时也只补齐缺失部分，不会重复叠加）
+    if (isSandbox()) {
+      unlockAllTechs();
+      renderDock();          // 解锁后设备卡片才会出现在建造栏
+    }
+
+    updateSeedBadge();
+    state.playing = true;
+    showScreen(null);
+
+    requestAnimationFrame(function () {
+      if (fresh || !save.cam) {
+        resetView();
+      } else {
+        state.cam = { x: save.cam.x, y: save.cam.y, s: save.cam.s };
+        renderCam();
+      }
+      updateAll();
+      refreshTechTree();
+      if (fresh) saveGame(true);
+    });
+  }
+
+  function deleteSave(id) {
+    saves = saves.filter(function (s) { return s.id !== id; });
+    writeJSON(LS_SAVES, saves);
+    try { localStorage.removeItem(SAVE_PRE + id); } catch (e) { /* ignore */ }
+    if (state.saveId === id) { state.saveId = null; state.playing = false; }
+  }
+
+  /* ---------- 15.4 主菜单 ---------- */
+  function renderMenu() {
+    const list = $('saveList');
+    delArmed = null;
+
+    if (!saves.length) {
+      list.innerHTML = '<div class="save-empty">还没有存档<br>' +
+        '<span style="font-size:10.5px;opacity:.75">建立你的第一座工厂，开始自动化流水线</span>' +
+        '<button class="mbtn primary tiny" data-newgame style="display:block;margin:12px auto 0">＋ 新建工厂</button></div>';
+      return;
+    }
+
+    saves.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+
+    list.innerHTML = saves.map(function (s) {
+      return '<div class="save-card" data-id="' + s.id + '">' +
+        '<div class="save-main">' +
+          '<div class="save-title"><b>' + esc(s.name) + '</b>' +
+            '<span class="badge ' + s.mode + '">' + (s.mode === 'sandbox' ? '沙盒' : '生存') + '</span></div>' +
+          '<div class="save-meta">' + fmtTime(s.updatedAt) +
+            ' · 科技 ' + (s.tech || 0) + '/' + TECHS.length +
+            ' · 设备 ' + (s.devices || 0) + ' 台' +
+            (s.seed ? ' · 种子 ' + s.seed : '') + '</div>' +
+        '</div>' +
+        '<button class="save-del" data-del="' + s.id + '">删除</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function resumeSave(id) {
+    const data = readJSON(SAVE_PRE + id, null);
+    if (!data) { toast('存档已损坏或丢失'); renderMenu(); return; }
+    startGame(data, false);
+  }
+
+  function beginNewGame() {
+    const input = $('newName');
+    input.value = '工厂 ' + (saves.length + 1);
+    $('newSeed').value = '';
+    updateSeedHint();
+    document.querySelectorAll('.mode-card').forEach(function (c) {
+      c.classList.toggle('on', c.dataset.mode === 'survival');
+    });
+    showScreen('newGame');
+    setTimeout(function () { input.focus(); input.select(); }, 120);
+  }
+
+  // 种子输入框下方的实时提示：文字会显示被解析成的数字种子
+  function updateSeedHint() {
+    const el = $('seedHint');
+    if (!el) return;
+    const raw = ($('newSeed').value || '').trim();
+    if (!raw) {
+      el.textContent = '留空 = 随机生成一张新地图';
+      el.classList.remove('set');
+      return;
+    }
+    el.textContent = '种子号 ' + seedToNum(raw);
+    el.classList.add('set');
+  }
+
+  function createGame() {
+    const name = ($('newName').value || '').trim().slice(0, 16) || ('工厂 ' + (saves.length + 1));
+    const pick = document.querySelector('.mode-card.on');
+    const mode = pick ? pick.dataset.mode : 'survival';
+
+    // 纯数字当地图种子本身；文字则哈希成数字，二者都能复现同一张图
+    const seedRaw = ($('newSeed').value || '').trim();
+    const seed = seedRaw ? seedToNum(seedRaw) : randomSeed();
+
+    const save = { id: uid(), name: name, mode: mode, seed: seed, createdAt: Date.now(), cam: null };
+    startGame(save, true);
+  }
+
+  function quitToMenu() {
+    if (state.playing) saveGame(true);
+    state.playing = false;
+    endPress();
+    renderMenu();
+    showScreen('menu');
+  }
+
+  /* ---------- 15.5 设置 ---------- */
+  function applySettings() {
+    document.body.classList.toggle('no-grid', !settings.grid);
+    document.body.classList.toggle('reduce-motion', !settings.motion);
+    document.querySelectorAll('[data-set]').forEach(function (el) {
+      el.classList.toggle('on', !!settings[el.dataset.set]);
+    });
+  }
+
+  function toggleSetting(key) {
+    settings[key] = !settings[key];
+    writeJSON(LS_SET, settings);
+    applySettings();
+    if (key === 'grid') renderCam();
+  }
+
+  function openSettings(from) {
+    settingsFrom = from || 'menu';
+    applySettings();
+    showScreen('settings');
+  }
+
+  /* ---------- 15.6 暂停 ---------- */
+  function openPause() {
+    if (!state.playing) return;
+    $('pauseSaveName').textContent = state.saveName + ' · ' + (isSandbox() ? '沙盒' : '生存') + ' · 种子 ' + state.seedNum;
+    showScreen('pause');
+  }
+
+  /* ---------- 15.7 界面事件 ---------- */
+  function bindUI() {
+    $('btnMenu').addEventListener('click', openPause);
+
+    $('btnNewGame').addEventListener('click', beginNewGame);
+    $('btnContinue').addEventListener('click', function () { renderMenu(); showScreen('continue'); });
+    $('btnOpenSettings').addEventListener('click', function () { openSettings('menu'); });
+    $('btnStartGame').addEventListener('click', createGame);
+
+    document.querySelectorAll('[data-back="menu"]').forEach(function (b) {
+      b.addEventListener('click', function () { showScreen('menu'); });
+    });
+    document.querySelectorAll('[data-back-settings]').forEach(function (b) {
+      b.addEventListener('click', function () { showScreen(settingsFrom === 'pause' ? 'pause' : 'menu'); });
+    });
+
+    // 模式选择
+    $('modePick').addEventListener('click', function (e) {
+      const card = e.target.closest('.mode-card');
+      if (!card) return;
+      document.querySelectorAll('.mode-card').forEach(function (c) { c.classList.toggle('on', c === card); });
+    });
+
+    // 存档列表：进入 / 删除 / 空态新建
+    $('saveList').addEventListener('click', function (e) {
+      if (e.target.closest('[data-newgame]')) {
+        e.stopPropagation();
+        beginNewGame();
+        return;
+      }
+      const delBtn = e.target.closest('.save-del');
+      if (delBtn) {
+        e.stopPropagation();
+        const id = delBtn.dataset.del;
+        if (delArmed === id) {
+          deleteSave(id);
+          renderMenu();
+        } else {
+          delArmed = id;
+          $('saveList').querySelectorAll('.save-del').forEach(function (b) {
+            b.classList.remove('armed');
+            b.textContent = '删除';
+          });
+          delBtn.classList.add('armed');
+          delBtn.textContent = '确认？';
+          setTimeout(function () {
+            if (delArmed === id && delBtn.isConnected) {
+              delArmed = null;
+              delBtn.classList.remove('armed');
+              delBtn.textContent = '删除';
+            }
+          }, 2600);
+        }
+        return;
+      }
+      const card = e.target.closest('.save-card');
+      if (card) resumeSave(card.dataset.id);
+    });
+
+    // 设置开关
+    document.querySelectorAll('[data-set]').forEach(function (el) {
+      el.addEventListener('click', function () { toggleSetting(el.dataset.set); });
+    });
+
+    // 清除全部存档（两段确认）
+    $('btnWipe').addEventListener('click', function () {
+      const btn = $('btnWipe');
+      if (!wipeArmed) {
+        wipeArmed = true;
+        btn.textContent = '再次点击确认清除';
+        btn.dataset.old = '清除全部存档';
+        setTimeout(function () {
+          wipeArmed = false;
+          btn.textContent = '清除全部存档';
+        }, 3000);
+        return;
+      }
+      saves.forEach(function (s) { try { localStorage.removeItem(SAVE_PRE + s.id); } catch (e) {} });
+      saves = [];
+      writeJSON(LS_SAVES, saves);
+      wipeArmed = false;
+      btn.textContent = '已全部清除';
+      setTimeout(function () { btn.textContent = '清除全部存档'; }, 1600);
+      if (state.playing) { state.playing = false; state.saveId = null; }
+      renderMenu();
+    });
+
+    // 暂停菜单
+    $('btnResume').addEventListener('click', function () { showScreen(null); });
+    $('btnSaveNow').addEventListener('click', function () { if (!saveGame(false)) return; renderMenu(); });
+    $('btnPauseSettings').addEventListener('click', function () { openSettings('pause'); });
+    $('btnQuit').addEventListener('click', quitToMenu);
+
+    // 新建存档输入框回车
+    $('newName').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); createGame(); }
+    });
+    $('newSeed').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); createGame(); }
+    });
+
+    // ---- 种子：随机按钮 / 实时解析提示 / 右下角复制 ----
+    $('btnSeedRandom').addEventListener('click', function () {
+      $('newSeed').value = String(randomSeed());
+      updateSeedHint();
+      $('newSeed').focus();
+    });
+    $('newSeed').addEventListener('input', updateSeedHint);
+
+    // 右下角种子牌：点击复制世界种子（带成功反馈）
+    const badge = $('seedBadge');
+    badge.addEventListener('click', function () {
+      const txt = String(state.seedNum);
+      copyText(txt).then(function (ok) {
+        if (!ok) {
+          toast('剪贴板不可用，请手动记下种子：' + txt);
+          return;
+        }
+        toast('种子已复制：' + txt);
+        badge.classList.add('copied');
+        badge.textContent = '✓ 已复制';
+        clearTimeout(badge._copyTimer);
+        badge._copyTimer = setTimeout(updateSeedBadge, 1200);
+      });
+    });
+
+    // Esc：关闭当前覆盖层
+    window.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if ($('screenSettings').classList.contains('on')) { showScreen(settingsFrom === 'pause' ? 'pause' : 'menu'); return; }
+      if ($('screenContinue').classList.contains('on')) { showScreen('menu'); return; }
+      if ($('screenNew').classList.contains('on')) { showScreen('menu'); return; }
+      if ($('screenPause').classList.contains('on')) { showScreen(null); return; }
+      // 游戏内：Esc 退出轨道铺设模式
+      if (state.wireKind) {
+        state.wireKind = null;
+        document.body.classList.remove('wiring');
+        updateDock();
+        toast('已退出接线模式');
+      }
+    });
+  }
+
+  /* ==========================================================
+     十六、启动
+     ========================================================== */
+  function boot() {
+    // 矿脉改为按种子在 startGame 里生成，这里不再预建
+    buildTechTree();
+    renderRes();
+    renderDock();
+    bindEvents();
+    bindUI();
+
+    applySettings();
+    renderMenu();
+    showScreen('menu');       // 先进主菜单，选完存档才开始
+
+    setInterval(gameTick, 200);
+    setInterval(tickClock, 1000);
+    linkFrame();               // rAF 驱动货物沿轨道 / 管道流动
+
+    // 自动保存
+    setInterval(function () {
+      if (settings.autosave && state.playing && !state.paused) saveGame(true);
+    }, 15000);
+
+    // 关页面前兜底保存
+    window.addEventListener('beforeunload', function () {
+      if (state.playing) saveGame(true);
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden && state.playing) saveGame(true);
+    });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
